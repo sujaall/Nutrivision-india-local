@@ -6,11 +6,11 @@ from PIL import Image
 import timm, os
 
 def load_all_models(models_dir):
-    configs = [
-        ('model1_efficientnet.pth', 'efficientnet_b2'),
-        ('model2_mobilenetv3.pth',  'mobilenetv3'),
-        ('model3_resnet50.pth',     'resnet50'),
-    ]
+   configs = [
+    ('model1_efficientnet.pth', 'efficientnet_b2'),
+    ('model2_mobilenetv3.pth',  'mobilenetv3'),
+    
+]
     loaded      = []
     class_names = None
 
