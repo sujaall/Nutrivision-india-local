@@ -1,0 +1,18 @@
+{
+  "nv_user": {
+    "name": "sujal",
+    "weight": 64.5,
+    "height": 169,
+    "age": 21,
+    "gender": "male",
+    "activity": "moderate",
+    "goal": "muscle_gain",
+    "tdee": 2482,
+    "targets": {
+      "calories": 2782,
+      "protein_g": 129,
+      "fat_g": 77,
+      "carbs_g": 522
+    }
+  }
+}

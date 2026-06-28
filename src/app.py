@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from predict import load_model, predict_food
+from ensemble_predict import load_all_models, ensemble_predict
 from tdee import calculate_tdee, calculate_targets
 from werkzeug.utils import secure_filename
 import json, os, requests as req
@@ -24,10 +24,10 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ============ LOAD MODEL & DATA ============
-print("Loading model...")
-model, class_names = load_model(MODEL_PATH)
-print("Model loaded!")
-
+print("Loading ensemble models...")
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
+models_list, class_names = load_all_models(MODELS_DIR)
+print(f"Ready! {len(models_list)} models loaded")
 with open(DATA_PATH) as f:
     nutrition_db = json.load(f)
 print(f"Nutrition DB loaded: {len(nutrition_db)} foods")
@@ -115,7 +115,8 @@ def analyze():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
-    predictions = predict_food(filepath, model, class_names)
+    predictions = ensemble_predict(
+    filepath, models_list, class_names)
     top_food    = predictions[0]['food']
     nutrition   = nutrition_db.get(top_food, {
         'calories_per_100g': 200,
@@ -166,8 +167,8 @@ def search_food():
             params={
                 'api_key':  USDA_API_KEY,
                 'query':    query,
-                'pageSize': 10,
-                'dataType': 'SR Legacy,Survey (FNDDS)'
+                'pageSize': 20,
+                'dataType': 'Foundation,SR Legacy,Survey (FNDDS),Branded'
             },
             timeout=5
         )
