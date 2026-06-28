@@ -6,12 +6,12 @@ from PIL import Image
 import timm, os
 
 def load_all_models(models_dir):
-   configs = [
-    ('model1_efficientnet.pth', 'efficientnet_b2'),
-    ('model2_mobilenetv3.pth',  'mobilenetv3'),
-    
-]
-    loaded      = []
+    configs = [
+        ('model1_efficientnet.pth', 'efficientnet_b2'),
+        ('model2_mobilenetv3.pth', 'mobilenetv3'),
+    ]
+
+    loaded = []
     class_names = None
 
     for filename, arch in configs:
@@ -20,24 +20,24 @@ def load_all_models(models_dir):
             print(f"Not found: {filename} — skipping")
             continue
 
-        ckpt        = torch.load(path, map_location='cpu')
-        class_names = ckpt['class_names']
-        n           = len(class_names)
+        ckpt = torch.load(path, map_location="cpu")
+        class_names = ckpt["class_names"]
+        n = len(class_names)
 
-        if arch == 'efficientnet_b2':
-            m = timm.create_model('efficientnet_b2',
-                pretrained=False, num_classes=n)
-        elif arch == 'mobilenetv3':
+        if arch == "efficientnet_b2":
+            m = timm.create_model(
+                "efficientnet_b2",
+                pretrained=False,
+                num_classes=n
+            )
+        elif arch == "mobilenetv3":
             m = models.mobilenet_v3_large(weights=None)
             m.classifier[3] = nn.Linear(1280, n)
-        elif arch == 'resnet50':
-            m = models.resnet50(weights=None)
-            m.fc = nn.Linear(2048, n)
 
-        m.load_state_dict(ckpt['model_state'])
+        m.load_state_dict(ckpt["model_state"])
         m.eval()
         loaded.append(m)
-        print(f"✅ Loaded: {filename}")
+        print(f"Loaded: {filename}")
 
     print(f"Total models loaded: {len(loaded)}")
     return loaded, class_names
