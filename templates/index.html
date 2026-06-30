@@ -220,10 +220,13 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0f1e;color:#e2e8f0;min-heig
 <div id="search-panel" style="display:none;">
   <div class="card">
     <div style="position:relative;">
-      <input class="form-input" id="food-search-input"
-        type="text" placeholder="Search... biryani, dal, poha"
-       oninput="debounceSearch(this.value)"
-    </div>
+  <input
+    class="form-input"
+    id="food-search-input"
+    type="text"
+    placeholder="Search... biryani, dal, poha"
+    oninput="debounceSearch(this.value)">
+</div>
     <div id="search-results" style="margin-top:12px;"></div>
   </div>
 
