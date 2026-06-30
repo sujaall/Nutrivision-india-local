@@ -222,7 +222,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0f1e;color:#e2e8f0;min-heig
     <div style="position:relative;">
       <input class="form-input" id="food-search-input"
         type="text" placeholder="Search... biryani, dal, poha"
-        oninput="searchFood(this.value)">
+       oninput="debounceSearch(this.value)"
     </div>
     <div id="search-results" style="margin-top:12px;"></div>
   </div>
@@ -322,7 +322,10 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0f1e;color:#e2e8f0;min-heig
 <!-- PROFILE -->
 <div class="screen" id="screen-profile">
   <div class="card">
-    <div class="card-title">Your Profile</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  <div class="card-title" style="margin-bottom:0;">Your Profile</div>
+  <button onclick="resetProfile()" style="background:#7f1d1d;color:#fca5a5;border:none;padding:6px 14px;border-radius:99px;font-size:0.75rem;font-weight:700;cursor:pointer;">🔄 Reset</button>
+</div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Your Name</label><input class="form-input" id="p-name" type="text" placeholder="Sujal"></div>
       <div class="form-group"><label class="form-label">Age</label><input class="form-input" id="p-age" type="number" placeholder="20"></div>
@@ -647,7 +650,41 @@ function renderDiary(entries,totals){
   });
   container.innerHTML=html;
 }
+let searchTimer = null;
 
+function debounceSearch(query) {
+  clearTimeout(searchTimer);
+  const container = document.getElementById('search-results');
+  if (query.length < 2) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = '<p style="color:#64748b;font-size:0.82rem;padding:8px;">Searching...</p>';
+  searchTimer = setTimeout(() => {
+    searchFood(query);
+  }, 500);
+}
+
+function resetProfile() {
+  if (confirm('This will clear all profile data and diary. Continue?')) {
+    localStorage.clear();
+    userProfile = null;
+    document.getElementById('no-profile-state').style.display = 'block';
+    document.getElementById('has-profile-state').style.display = 'none';
+    document.getElementById('profile-result').style.display = 'none';
+    document.getElementById('p-name').value = '';
+    document.getElementById('p-age').value = '';
+    document.getElementById('p-weight').value = '';
+    document.getElementById('p-height').value = '';
+    showScreen('profile');
+    showToast('Profile reset! Enter new data.');
+  }
+}
+
+function keepAlive() {
+  fetch('/ping').catch(() => {});
+}
+setInterval(keepAlive, 10 * 60 * 1000);
 function showToast(msg,error){
   const t=document.getElementById('toast');
   t.textContent=msg;

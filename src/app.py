@@ -3,6 +3,20 @@ from ensemble_predict import load_all_models, ensemble_predict
 from tdee import calculate_tdee, calculate_targets
 from werkzeug.utils import secure_filename
 import json, os, requests as req
+import time
+
+search_cache = {}
+CACHE_DURATION = 300
+
+def get_cached_search(query):
+    if query in search_cache:
+        result, timestamp = search_cache[query]
+        if time.time() - timestamp < CACHE_DURATION:
+            return result
+    return None
+
+def set_cached_search(query, results):
+    search_cache[query] = (results, time.time())
 from datetime import datetime, date
 
 # ============ CONFIG ============
@@ -67,6 +81,9 @@ def get_today_totals(diary, user_id):
 @app.route('/')
 def index():
     return render_template('index.html')
+@app.route('/ping')
+def ping():
+    return jsonify({'status': 'alive'})
 
 # ---------- PROFILE ----------
 @app.route('/api/save_profile', methods=['POST'])
@@ -137,6 +154,9 @@ def search_food():
     query = request.args.get('q', '').strip()
     if len(query) < 2:
         return jsonify({'results': []})
+    cached = get_cached_search(query.lower())
+    if cached is not None:
+        return jsonify({'results': cached})
 
     q_lower = query.lower()
     results = []
@@ -244,6 +264,7 @@ def search_food():
     except Exception as e:
         print(f"OpenFoodFacts error: {e}")
 
+    set_cached_search(query.lower(), results[:20])
     return jsonify({'results': results[:20]})
 
 # ---------- DIARY ----------
