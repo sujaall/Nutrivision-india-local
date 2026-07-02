@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>NutriVision India</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Segoe UI',sans-serif;background:#0a0f1e;color:#e2e8f0;min-height:100vh;}
@@ -120,6 +121,43 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0f1e;color:#e2e8f0;min-heig
 }
 .search-item-cal {
   font-size:0.75rem; color:#64748b; margin-top:3px;
+}
+.barcode-btn {
+  background:linear-gradient(135deg,#7c3aed,#4f46e5);
+  color:white; border:none; padding:13px 24px;
+  border-radius:50px; font-size:0.9rem; font-weight:700;
+  cursor:pointer; width:100%; margin-bottom:12px;
+  transition:transform 0.2s;
+}
+.barcode-btn:hover { transform:scale(1.02); }
+#barcode-modal {
+  display:none; position:fixed; top:0; left:0;
+  width:100%; height:100%; background:rgba(0,0,0,0.95);
+  z-index:999; flex-direction:column;
+  align-items:center; justify-content:center;
+}
+#barcode-modal.open { display:flex; }
+#barcode-viewport {
+  width:300px; height:200px; position:relative;
+  border:3px solid #f97316; border-radius:12px;
+  overflow:hidden;
+}
+#barcode-viewport canvas,
+#barcode-viewport video {
+  width:100% !important;
+  height:100% !important;
+}
+.barcode-close {
+  margin-top:20px; background:#1e293b; color:white;
+  border:none; padding:10px 24px; border-radius:99px;
+  font-size:0.9rem; cursor:pointer;
+}
+.barcode-hint {
+  color:#94a3b8; font-size:0.85rem;
+  margin-top:16px; text-align:center;
+}
+#barcode-result-card {
+  display:none;
 }
 </style>
 </head>
@@ -266,6 +304,55 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0f1e;color:#e2e8f0;min-heig
   </div>
 </div>
   <input type="file" id="fileInput" accept="image/*" capture="environment">
+  <!-- BARCODE SCANNER -->
+<button class="barcode-btn" onclick="openBarcodeScanner()">
+  📦 Scan Barcode (Packaged Food)
+</button>
+
+<!-- Barcode result card -->
+<div class="card" id="barcode-result-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div class="result-food" id="barcode-food-name" style="font-size:1.2rem;">—</div>
+    <span style="background:#7c3aed;color:white;font-size:0.7rem;padding:3px 10px;border-radius:99px;font-weight:700;">BARCODE</span>
+  </div>
+  <div class="macro-mini-grid">
+    <div class="macro-mini m-cal"><div class="macro-mini-val" id="bc-cal">—</div><div class="macro-mini-lbl">Calories</div></div>
+    <div class="macro-mini m-pro"><div class="macro-mini-val" id="bc-pro">—</div><div class="macro-mini-lbl">Protein g</div></div>
+    <div class="macro-mini m-car"><div class="macro-mini-val" id="bc-car">—</div><div class="macro-mini-lbl">Carbs g</div></div>
+    <div class="macro-mini m-fat"><div class="macro-mini-val" id="bc-fat">—</div><div class="macro-mini-lbl">Fat g</div></div>
+  </div>
+  <div class="portion-row">
+    <label>Portion:</label>
+    <input type="range" id="bcSlider" min="50" max="500"
+      value="100" step="25" oninput="updateBcPortion(this.value)">
+    <span class="portion-val" id="bcLabel">100g</span>
+  </div>
+  <div class="card-title" style="margin-top:14px;">Meal Type</div>
+  <div class="meal-type-row">
+    <div class="meal-type-btn active" onclick="selectMeal(this,'breakfast')">🌅 Breakfast</div>
+    <div class="meal-type-btn" onclick="selectMeal(this,'lunch')">☀️ Lunch</div>
+    <div class="meal-type-btn" onclick="selectMeal(this,'dinner')">🌙 Dinner</div>
+    <div class="meal-type-btn" onclick="selectMeal(this,'snack')">🍎 Snack</div>
+  </div>
+  <button class="btn" onclick="logBarcodeFood()" style="margin-top:12px;">
+    ✅ Add to Diary
+  </button>
+  <button class="btn btn-secondary" onclick="closeBarcodeResult()" style="margin-top:10px;">
+    🔄 Scan Another
+  </button>
+</div>
+
+<!-- Barcode camera modal -->
+<div id="barcode-modal">
+  <p style="color:#f97316;font-weight:700;font-size:1rem;margin-bottom:16px;">
+    📦 Point camera at barcode
+  </p>
+  <div id="barcode-viewport"></div>
+  <p class="barcode-hint">Hold steady · Good lighting helps</p>
+  <button class="barcode-close" onclick="closeBarcodeScanner()">
+    ✕ Cancel
+  </button>
+</div>
   <div id="scan-loading" style="display:none;" class="card">
     <div class="loading-box"><div class="spinner"></div><p style="color:#94a3b8;">Analyzing your food...</p></div>
   </div>
@@ -688,6 +775,130 @@ function keepAlive() {
   fetch('/ping').catch(() => {});
 }
 setInterval(keepAlive, 10 * 60 * 1000);
+let barcodeNutrition = {};
+let barcodeRunning = false;
+
+function openBarcodeScanner() {
+  document.getElementById('barcode-modal').classList.add('open');
+  barcodeRunning = true;
+
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: document.getElementById('barcode-viewport'),
+      constraints: {
+        facingMode: 'environment'
+      }
+    },
+    decoder: {
+      readers: [
+        'ean_reader',
+        'ean_8_reader',
+        'upc_reader',
+        'upc_e_reader',
+        'code_128_reader'
+      ]
+    }
+  }, function(err) {
+    if (err) {
+      console.error(err);
+      showToast('Camera error. Try manual search.', true);
+      closeBarcodeScanner();
+      return;
+    }
+    Quagga.start();
+  });
+
+  Quagga.onDetected(function(result) {
+    if (!barcodeRunning) return;
+    const code = result.codeResult.code;
+    if (code) {
+      barcodeRunning = false;
+      Quagga.stop();
+      closeBarcodeScanner();
+      lookupBarcode(code);
+    }
+  });
+}
+
+function closeBarcodeScanner() {
+  document.getElementById('barcode-modal').classList.remove('open');
+  try { Quagga.stop(); } catch(e) {}
+  barcodeRunning = false;
+}
+
+async function lookupBarcode(barcode) {
+  showToast('Looking up product...');
+  try {
+    const res = await fetch('/api/barcode/' + barcode);
+    const data = await res.json();
+    if (data.error) {
+      showToast('Product not found. Try manual search.', true);
+      return;
+    }
+    barcodeNutrition = data;
+    document.getElementById('barcode-food-name').textContent =
+      data.name;
+    document.getElementById('bcSlider').value = 100;
+    document.getElementById('bcLabel').textContent = '100g';
+    updateBcPortion(100);
+    document.getElementById('barcode-result-card').style.display = 'block';
+    document.getElementById('barcode-result-card')
+      .scrollIntoView({behavior: 'smooth'});
+  } catch(e) {
+    showToast('Lookup failed. Try again.', true);
+  }
+}
+
+function updateBcPortion(val) {
+  document.getElementById('bcLabel').textContent = val + 'g';
+  const f = val / 100;
+  const n = barcodeNutrition;
+  document.getElementById('bc-cal').textContent =
+    Math.round((n.calories_per_100g||0) * f);
+  document.getElementById('bc-pro').textContent =
+    Math.round((n.protein||0) * f * 10) / 10;
+  document.getElementById('bc-car').textContent =
+    Math.round((n.carbs||0) * f * 10) / 10;
+  document.getElementById('bc-fat').textContent =
+    Math.round((n.fat||0) * f * 10) / 10;
+}
+
+async function logBarcodeFood() {
+  const portion = parseInt(
+    document.getElementById('bcSlider').value);
+  const f = portion / 100;
+  const n = barcodeNutrition;
+  const entry = {
+    user_id: USER_ID,
+    food: n.name,
+    portion: portion,
+    calories: Math.round((n.calories_per_100g||0) * f),
+    protein: Math.round((n.protein||0) * f * 10) / 10,
+    carbs: Math.round((n.carbs||0) * f * 10) / 10,
+    fat: Math.round((n.fat||0) * f * 10) / 10,
+    meal_type: currentMealType
+  };
+  try {
+    const res = await fetch('/api/log_meal', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(entry)
+    });
+    const data = await res.json();
+    if (data.success) updateProgress(data.today_totals);
+  } catch(e) {}
+  showToast('Added to diary! ✅');
+  closeBarcodeResult();
+  setTimeout(() => showScreen('diary'), 800);
+}
+
+function closeBarcodeResult() {
+  document.getElementById('barcode-result-card')
+    .style.display = 'none';
+  barcodeNutrition = {};
+}
 function showToast(msg,error){
   const t=document.getElementById('toast');
   t.textContent=msg;

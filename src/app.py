@@ -84,6 +84,36 @@ def index():
 @app.route('/ping')
 def ping():
     return jsonify({'status': 'alive'})
+@app.route('/api/barcode/<barcode>')
+def lookup_barcode(barcode):
+    try:
+        url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
+        response = req.get(url, timeout=5)
+        data = response.json()
+
+        if data.get('status') != 1:
+            return jsonify({'error': 'Product not found'}), 404
+
+        product = data['product']
+        nutriments = product.get('nutriments', {})
+        name = product.get('product_name', 'Unknown Product')
+        cal = nutriments.get('energy-kcal_100g', 0)
+
+        return jsonify({
+            'name': name[:50],
+            'barcode': barcode,
+            'calories_per_100g': round(cal),
+            'protein': round(
+                nutriments.get('proteins_100g', 0), 1),
+            'carbs': round(
+                nutriments.get('carbohydrates_100g', 0), 1),
+            'fat': round(
+                nutriments.get('fat_100g', 0), 1),
+            'brand': product.get('brands', ''),
+            'image': product.get('image_url', '')
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ---------- PROFILE ----------
 @app.route('/api/save_profile', methods=['POST'])
