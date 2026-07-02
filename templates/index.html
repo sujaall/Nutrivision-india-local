@@ -833,9 +833,14 @@ async function lookupBarcode(barcode) {
   try {
     const res = await fetch('/api/barcode/' + barcode);
     const data = await res.json();
-    if (data.error) {
-      showToast('Product not found. Try manual search.', true);
-      return;
+   if (data.error) {
+  showToast('Not in database. Use manual search 👇', true);
+  // Auto-open search panel
+  document.getElementById('scan-upload').style.display = 'none';
+  document.getElementById('search-panel').style.display = 'block';
+  document.getElementById('food-search-input').focus();
+  return;
+}
     }
     barcodeNutrition = data;
     document.getElementById('barcode-food-name').textContent =

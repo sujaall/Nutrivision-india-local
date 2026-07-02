@@ -86,34 +86,96 @@ def ping():
     return jsonify({'status': 'alive'})
 @app.route('/api/barcode/<barcode>')
 def lookup_barcode(barcode):
+    # Database 1 — Open Food Facts World
     try:
         url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
-        response = req.get(url, timeout=5)
-        data = response.json()
-
-        if data.get('status') != 1:
-            return jsonify({'error': 'Product not found'}), 404
-
-        product = data['product']
-        nutriments = product.get('nutriments', {})
-        name = product.get('product_name', 'Unknown Product')
-        cal = nutriments.get('energy-kcal_100g', 0)
-
-        return jsonify({
-            'name': name[:50],
-            'barcode': barcode,
-            'calories_per_100g': round(cal),
-            'protein': round(
-                nutriments.get('proteins_100g', 0), 1),
-            'carbs': round(
-                nutriments.get('carbohydrates_100g', 0), 1),
-            'fat': round(
-                nutriments.get('fat_100g', 0), 1),
-            'brand': product.get('brands', ''),
-            'image': product.get('image_url', '')
-        })
+        res = req.get(url, timeout=5)
+        data = res.json()
+        if data.get('status') == 1:
+            product = data['product']
+            nutriments = product.get('nutriments', {})
+            name = product.get('product_name', '').strip()
+            cal = nutriments.get('energy-kcal_100g', 0)
+            if name and cal:
+                return jsonify({
+                    'name': name[:50],
+                    'barcode': barcode,
+                    'calories_per_100g': round(cal),
+                    'protein': round(
+                        nutriments.get('proteins_100g',0),1),
+                    'carbs': round(
+                        nutriments.get('carbohydrates_100g',0),1),
+                    'fat': round(
+                        nutriments.get('fat_100g',0),1),
+                    'source': 'Open Food Facts'
+                })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"OFF World error: {e}")
+
+    # Database 2 — Open Food Facts India specifically
+    try:
+        url = f"https://in.openfoodfacts.org/api/v0/product/{barcode}.json"
+        res = req.get(url, timeout=5)
+        data = res.json()
+        if data.get('status') == 1:
+            product = data['product']
+            nutriments = product.get('nutriments', {})
+            name = product.get('product_name', '').strip()
+            cal = nutriments.get('energy-kcal_100g', 0)
+            if name and cal:
+                return jsonify({
+                    'name': name[:50],
+                    'barcode': barcode,
+                    'calories_per_100g': round(cal),
+                    'protein': round(
+                        nutriments.get('proteins_100g',0),1),
+                    'carbs': round(
+                        nutriments.get('carbohydrates_100g',0),1),
+                    'fat': round(
+                        nutriments.get('fat_100g',0),1),
+                    'source': 'Open Food Facts India'
+                })
+    except Exception as e:
+        print(f"OFF India error: {e}")
+
+    # Database 3 — USDA Branded Foods
+    try:
+        usda_url = "https://api.nal.usda.gov/fdc/v1/foods/search"
+        params = {
+            'api_key': USDA_API_KEY,
+            'query': barcode,
+            'dataType': 'Branded',
+            'pageSize': 1
+        }
+        res = req.get(usda_url, params=params, timeout=5)
+        data = res.json()
+        foods = data.get('foods', [])
+        if foods:
+            food = foods[0]
+            nutrients = food.get('foodNutrients', [])
+            cal = extract_nutrient(nutrients, 'Energy')
+            if cal:
+                return jsonify({
+                    'name': food.get('description','')[:50],
+                    'barcode': barcode,
+                    'calories_per_100g': cal,
+                    'protein': extract_nutrient(
+                        nutrients, 'Protein'),
+                    'carbs': extract_nutrient(
+                        nutrients, 'Carbohydrate'),
+                    'fat': extract_nutrient(
+                        nutrients, 'Total lipid'),
+                    'source': 'USDA'
+                })
+    except Exception as e:
+        print(f"USDA barcode error: {e}")
+
+    # Nothing found in any database
+    return jsonify({
+        'error': 'Product not found',
+        'barcode': barcode,
+        'suggestion': 'Try manual search instead'
+    }), 404
 
 # ---------- PROFILE ----------
 @app.route('/api/save_profile', methods=['POST'])
