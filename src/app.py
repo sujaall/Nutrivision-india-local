@@ -53,14 +53,30 @@ MODEL_PATH    = os.path.join(BASE_DIR, 'models', 'nutrivision_model.pth')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ============ LOAD MODEL & DATA ============
-print("Loading ensemble models...")
-MODELS_DIR = os.path.join(BASE_DIR, 'models')
-models_list, class_names = load_all_models(MODELS_DIR)
-print(f"Ready! {len(models_list)} models loaded")
+# ============ LOAD DATA (small, load eagerly) ============
 with open(DATA_PATH) as f:
     nutrition_db = json.load(f)
 print(f"Nutrition DB loaded: {len(nutrition_db)} foods")
+
+# ============ LAZY MODEL LOADING ============
+# Models are NOT loaded at startup to avoid OOM on Render free tier (512MB).
+# They are loaded on the first /analyze request.
+import threading
+_model_lock = threading.Lock()
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
+models_list = None
+class_names = None
+
+def _ensure_models_loaded():
+    global models_list, class_names
+    if models_list is not None:
+        return
+    with _model_lock:
+        if models_list is not None:
+            return
+        print("[lazy] Loading ensemble models...")
+        models_list, class_names = load_all_models(MODELS_DIR)
+        print(f"[lazy] Ready! {len(models_list)} models loaded")
 
 # ============ HELPERS ============
 def load_json(path):
@@ -560,8 +576,11 @@ def analyze():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
+    _ensure_models_loaded()
+    if not models_list:
+        return jsonify({'error': 'Models could not be loaded. Please try again.'}), 500
     predictions = ensemble_predict(
-    filepath, models_list, class_names)
+        filepath, models_list, class_names)
     top_food    = predictions[0]['food']
     local_db    = load_json(DATA_PATH) or nutrition_db
     nutrition   = local_db.get(top_food, local_db.get(top_food.replace('_', ' '), {

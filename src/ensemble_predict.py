@@ -6,10 +6,12 @@ from PIL import Image
 import timm, os
 
 def load_all_models(models_dir):
+    # Skip ResNet50 (94MB file) on free tier — too much RAM
+    # EfficientNet B2 + MobileNetV3 give good accuracy at lower memory cost
     configs = [
         ('model1_efficientnet.pth', 'efficientnet_b2'),
         ('model2_mobilenetv3.pth', 'mobilenetv3'),
-        ('model3_resnet50.pth', 'resnet50'),
+        # ('model3_resnet50.pth', 'resnet50'),  # disabled: too large for 512MB free tier
     ]
 
     loaded = []
@@ -26,10 +28,10 @@ def load_all_models(models_dir):
                 ckpt = torch.load(path, map_location="cpu", weights_only=False)
             except TypeError:
                 ckpt = torch.load(path, map_location="cpu")
-            
+
             if not class_names and "class_names" in ckpt:
                 class_names = ckpt["class_names"]
-            
+
             n = len(class_names) if class_names else len(ckpt.get("class_names", []))
 
             if arch == "efficientnet_b2":
@@ -48,9 +50,11 @@ def load_all_models(models_dir):
                 continue
 
             m.load_state_dict(ckpt["model_state"])
+            # Use float16 half-precision to cut RAM usage by ~50%
+            m = m.half()
             m.eval()
             loaded.append(m)
-            print(f"Loaded: {filename} ({arch})")
+            print(f"Loaded: {filename} ({arch}) [float16]")
         except Exception as e:
             print(f"Warning: Failed loading {filename}: {e}")
 
@@ -92,12 +96,14 @@ def ensemble_predict(image_path, models_list,
     with torch.no_grad():
         for model in models_list:
             for tf in TTA_TRANSFORMS:
-                tensor = tf(img).unsqueeze(0)
+                # Cast input tensor to float16 to match half-precision model
+                tensor = tf(img).unsqueeze(0).half()
                 out    = model(tensor)
-                probs  = torch.softmax(out, dim=1)
+                # Cast back to float32 for softmax stability
+                probs  = torch.softmax(out.float(), dim=1)
                 all_probs.append(probs)
 
-    # Average ALL 9 predictions (3 models x 3 transforms)
+    # Average all predictions (2 models x 3 transforms = 6)
     avg          = torch.stack(all_probs).mean(0)
     top_p, top_i = avg.topk(top_k)
 
