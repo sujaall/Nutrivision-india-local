@@ -91,13 +91,65 @@ function showScreen(screenName) {
   if (screenName === 'home') loadDashboard();
   if (screenName === 'history') loadHistoryTimeline();
   if (screenName === 'coach') loadCoachScreen();
-  if (screenName === 'nutrition') {
+  if (screenName === 'foodlog') {
     AppState.searchCategory = 'all';
     performFoodSearch('', 'all');
   }
+  // Legacy: scanner / nutrition redirect to foodlog
+  if (screenName === 'scanner') { showScreen('foodlog'); setFoodLogTab('scan'); return; }
+  if (screenName === 'nutrition') { showScreen('foodlog'); setFoodLogTab('search'); return; }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+// ============ FOOD LOG TABS ============
+function setFoodLogTab(tab) {
+  // Activate the correct tab button
+  ['scan', 'search', 'barcode'].forEach(t => {
+    const btn = document.getElementById('tab-btn-' + t);
+    const panel = document.getElementById('foodlog-panel-' + t);
+    if (btn) btn.classList.toggle('active', t === tab);
+    if (panel) panel.style.display = (t === tab) ? '' : 'none';
+  });
+
+  // Auto-load search results when switching to search tab
+  if (tab === 'search') {
+    AppState.searchCategory = 'all';
+    performFoodSearch('', 'all');
+  }
+}
+
+// Start barcode scanner inline in the Food Log barcode tab
+function startInlineBarcodeScanner() {
+  const viewport = document.getElementById('barcode-inline-viewport');
+  if (!viewport) return;
+  // Reuse existing Quagga barcode scanner, pointing to inline viewport
+  if (window.QuaggaActive) { Quagga.stop(); window.QuaggaActive = false; }
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: viewport,
+      constraints: { facingMode: 'environment' }
+    },
+    decoder: { readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_128_reader'] }
+  }, function(err) {
+    if (err) { showToast('Camera error: ' + err.message, 'error'); return; }
+    Quagga.start();
+    window.QuaggaActive = true;
+  });
+  Quagga.offDetected();
+  Quagga.onDetected(function(result) {
+    const code = result.codeResult.code;
+    if (code) {
+      Quagga.stop(); window.QuaggaActive = false;
+      document.getElementById('manual-barcode-digits').value = code;
+      lookupManualBarcodeString();
+    }
+  });
+}
+
+
 
 function initDateHeaders() {
   const now = new Date();

@@ -14,7 +14,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
   
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/static/css/main.css?v=2.1">
+  <link rel="stylesheet" href="/static/css/main.css?v=2.2">
 </head>
 <body>
 
@@ -34,11 +34,8 @@
         <button type="button" class="nav-link-btn active" data-screen="home" onclick="showScreen('home')">
           <span class="nav-icon">🏠</span> <span>Home</span>
         </button>
-        <button type="button" class="nav-link-btn" data-screen="scanner" onclick="showScreen('scanner')">
-          <span class="nav-icon">📸</span> <span>Scan Food</span>
-        </button>
-        <button type="button" class="nav-link-btn" data-screen="nutrition" onclick="showScreen('nutrition')">
-          <span class="nav-icon">🔍</span> <span>Nutrition</span>
+        <button type="button" class="nav-link-btn" data-screen="foodlog" onclick="showScreen('foodlog')">
+          <span class="nav-icon">🍽️</span> <span>Food Log</span>
         </button>
         <button type="button" class="nav-link-btn" data-screen="history" onclick="showScreen('history')">
           <span class="nav-icon">📔</span> <span>History</span>
@@ -72,13 +69,13 @@
             Identify authentic Indian meals, track calories, monitor protein goals, and scan packaged items with deep learning precision.
           </p>
           <div class="hero-cta-group">
-            <button type="button" class="btn btn-primary" onclick="showScreen('scanner')">
+            <button type="button" class="btn btn-primary" onclick="showScreen('foodlog'); setFoodLogTab('scan')">
               <span>📸</span> <span>Scan Your Food</span>
             </button>
-            <button type="button" class="btn btn-secondary" onclick="showScreen('nutrition')">
+            <button type="button" class="btn btn-secondary" onclick="showScreen('foodlog'); setFoodLogTab('search')">
               <span>🔍</span> <span>Search Foods</span>
             </button>
-            <button type="button" class="btn btn-secondary" onclick="openBarcodeModal()">
+            <button type="button" class="btn btn-secondary" onclick="showScreen('foodlog'); setFoodLogTab('barcode')">
               <span>📦</span> <span>Scan Barcode</span>
             </button>
           </div>
@@ -98,15 +95,15 @@
       <div id="dash-active-summary">
         <!-- Shortcuts Grid -->
         <div class="shortcuts-grid">
-          <div class="shortcut-card" onclick="showScreen('scanner')">
+          <div class="shortcut-card" onclick="showScreen('foodlog'); setFoodLogTab('scan')">
             <span class="shortcut-icon">📸</span>
             <span class="shortcut-title">AI Food Scan</span>
           </div>
-          <div class="shortcut-card" onclick="openBarcodeModal()">
+          <div class="shortcut-card" onclick="showScreen('foodlog'); setFoodLogTab('barcode')">
             <span class="shortcut-icon">📦</span>
-            <span class="shortcut-title">Barcode OCR</span>
+            <span class="shortcut-title">Barcode Scan</span>
           </div>
-          <div class="shortcut-card" onclick="showScreen('nutrition')">
+          <div class="shortcut-card" onclick="showScreen('foodlog'); setFoodLogTab('search')">
             <span class="shortcut-icon">🔍</span>
             <span class="shortcut-title">Food Search</span>
           </div>
@@ -237,101 +234,225 @@
     </main>
 
     <!-- ==========================================================================
-         SCREEN 2: SCAN FOOD (AI VISION)
+         SCREEN 2: UNIFIED FOOD LOG (AI Scan + Search + Barcode)
          ========================================================================== -->
-    <main class="screen-view" id="screen-scanner">
-      <div class="scanner-container">
-        
-        <!-- Live Camera Stream -->
-        <div class="live-camera-wrapper" id="live-camera-wrapper">
-          <video class="camera-video-feed" id="live-camera-video" autoplay playsinline muted></video>
-          <div class="camera-overlay-controls">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="switchCameraFacing()">🔄 Flip</button>
-            <button type="button" class="shutter-btn" onclick="captureCameraSnapshot()" title="Capture Plate"></button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="stopLiveCamera()">✕ Close</button>
+    <main class="screen-view" id="screen-foodlog">
+
+      <!-- Food Log Page Header -->
+      <div class="foodlog-header">
+        <div class="section-eyebrow">Add to Your Diary</div>
+        <h2 class="foodlog-title">🍽️ Food Log</h2>
+        <p class="foodlog-subtitle">Choose how you want to log your food below</p>
+      </div>
+
+      <!-- Method Tabs -->
+      <div class="foodlog-tabs" id="foodlog-tabs">
+        <button type="button" class="foodlog-tab-btn active" id="tab-btn-scan" onclick="setFoodLogTab('scan')">
+          <span class="foodlog-tab-icon">📸</span>
+          <span class="foodlog-tab-label">AI Scan</span>
+          <span class="foodlog-tab-desc">Photo your meal</span>
+        </button>
+        <button type="button" class="foodlog-tab-btn" id="tab-btn-search" onclick="setFoodLogTab('search')">
+          <span class="foodlog-tab-icon">🔍</span>
+          <span class="foodlog-tab-label">Food Search</span>
+          <span class="foodlog-tab-desc">Type & find food</span>
+        </button>
+        <button type="button" class="foodlog-tab-btn" id="tab-btn-barcode" onclick="setFoodLogTab('barcode')">
+          <span class="foodlog-tab-icon">📦</span>
+          <span class="foodlog-tab-label">Barcode</span>
+          <span class="foodlog-tab-desc">Scan packed food</span>
+        </button>
+      </div>
+
+      <!-- ── TAB 1: AI FOOD SCAN ── -->
+      <div class="foodlog-panel" id="foodlog-panel-scan">
+        <div class="foodlog-method-hint">
+          <span class="hint-icon">📸</span>
+          <div>
+            <div class="hint-title">Scan your cooked meal or dish</div>
+            <div class="hint-desc">Take a photo or upload an image — our AI will identify the food and show nutrition facts instantly.</div>
           </div>
         </div>
 
-        <!-- Drag & Drop Upload Zone -->
-        <div class="dropzone-box" id="scanner-dropzone" onclick="document.getElementById('food-file-input').click()">
-          <div class="dropzone-icon">📸</div>
-          <h2 class="dropzone-title">Scan your food</h2>
-          <p class="dropzone-hint">Upload a photo and let NutriVision's AI ensemble identify your dish.</p>
-          <div style="display:flex;justify-content:center;gap:10px;">
-            <button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation(); startLiveCamera();">📷 Use Live Camera</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); document.getElementById('food-file-input').click();">📁 Browse File</button>
-          </div>
-        </div>
-
-        <input type="file" id="food-file-input" accept="image/*" style="display:none;" onchange="handleFileInput(event)">
-
-        <!-- Analyzing / Loading Feedback Card -->
-        <div class="surface-card analyzing-box" id="scanner-analyzing-card">
-          <div class="analyzing-scanline"></div>
-          <div class="analyzing-spinner"></div>
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:4px;">Analyzing your meal…</h3>
-          <p style="font-size:0.85rem;color:var(--text-secondary);">Ensemble model evaluating Indian food vision features.</p>
-        </div>
-
-        <!-- Prediction & Nutrition Result Card -->
-        <div class="surface-card" id="scanner-result-card" style="display:none;">
-          <div class="result-header">
-            <img src="" id="result-image-element" class="result-image-preview" alt="Food plate preview">
-            <div class="result-meta-column">
-              <span class="confidence-badge" id="result-confidence-badge">High Confidence: 92%</span>
-              <h2 class="result-food-name" id="result-dish-title">—</h2>
-              <div id="result-diet-notes"></div>
+        <div class="scanner-container">
+          <!-- Live Camera Stream -->
+          <div class="live-camera-wrapper" id="live-camera-wrapper">
+            <video class="camera-video-feed" id="live-camera-video" autoplay playsinline muted></video>
+            <div class="camera-overlay-controls">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="switchCameraFacing()">🔄 Flip</button>
+              <button type="button" class="shutter-btn" onclick="captureCameraSnapshot()" title="Capture Plate"></button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="stopLiveCamera()">✕ Close</button>
             </div>
           </div>
 
-          <!-- Alternative Predictions Switcher -->
-          <div class="alternate-predictions-box">
-            <div class="section-eyebrow">Other Likely Matches</div>
-            <div class="alt-chips-container" id="alt-predictions-container"></div>
+          <!-- Drag & Drop Upload Zone -->
+          <div class="dropzone-box" id="scanner-dropzone" onclick="document.getElementById('food-file-input').click()">
+            <div class="dropzone-icon">📸</div>
+            <h2 class="dropzone-title">Take a photo of your food</h2>
+            <p class="dropzone-hint">Our AI will recognize the dish and show you calories, protein, carbs &amp; fat.</p>
+            <div style="display:flex;justify-content:center;gap:10px;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation(); startLiveCamera();">📷 Use Camera</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); document.getElementById('food-file-input').click();">📁 Upload Photo</button>
+            </div>
           </div>
 
-          <!-- Macro Metric 4-Grid -->
+          <input type="file" id="food-file-input" accept="image/*" style="display:none;" onchange="handleFileInput(event)">
+
+          <!-- Analyzing / Loading Feedback Card -->
+          <div class="surface-card analyzing-box" id="scanner-analyzing-card">
+            <div class="analyzing-scanline"></div>
+            <div class="analyzing-spinner"></div>
+            <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:4px;">Analyzing your meal…</h3>
+            <p style="font-size:0.85rem;color:var(--text-secondary);">Ensemble model evaluating Indian food vision features.</p>
+          </div>
+
+          <!-- Prediction & Nutrition Result Card -->
+          <div class="surface-card" id="scanner-result-card" style="display:none;">
+            <div class="result-header">
+              <img src="" id="result-image-element" class="result-image-preview" alt="Food plate preview">
+              <div class="result-meta-column">
+                <span class="confidence-badge" id="result-confidence-badge">High Confidence: 92%</span>
+                <h2 class="result-food-name" id="result-dish-title">—</h2>
+                <div id="result-diet-notes"></div>
+              </div>
+            </div>
+
+            <!-- Alternative Predictions Switcher -->
+            <div class="alternate-predictions-box">
+              <div class="section-eyebrow">Other Likely Matches</div>
+              <div class="alt-chips-container" id="alt-predictions-container"></div>
+            </div>
+
+            <!-- Macro Metric 4-Grid -->
+            <div class="macro-metric-grid">
+              <div class="macro-metric-box">
+                <div class="macro-metric-val cal" id="metric-val-cal">0</div>
+                <div class="macro-metric-lbl">Calories</div>
+              </div>
+              <div class="macro-metric-box">
+                <div class="macro-metric-val pro" id="metric-val-pro">0g</div>
+                <div class="macro-metric-lbl">Protein</div>
+              </div>
+              <div class="macro-metric-box">
+                <div class="macro-metric-val car" id="metric-val-car">0g</div>
+                <div class="macro-metric-lbl">Carbs</div>
+              </div>
+              <div class="macro-metric-box">
+                <div class="macro-metric-val fat" id="metric-val-fat">0g</div>
+                <div class="macro-metric-lbl">Fat</div>
+              </div>
+            </div>
+
+            <!-- Indian Portion Presets -->
+            <div class="portion-selector-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="field-label" style="margin:0;">Serving Portion</span>
+                <span id="portion-display-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
+              </div>
+
+              <div class="presets-grid">
+                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(50, this)">🖐️ Small Snack (50g)</button>
+                <button type="button" class="preset-chip-btn active" onclick="setPortionPreset(100, this)">🥣 Small Katori (100g)</button>
+                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(125, this)">🍽️ Half Plate (125g)</button>
+                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(150, this)">🥣 Medium Katori (150g)</button>
+                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(250, this)">🍽️ Full Plate (250g)</button>
+                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(350, this)">🍱 Large Thali (350g)</button>
+              </div>
+
+              <input type="range" id="portion-slider-input" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);" oninput="updatePortionMetrics(this.value)">
+            </div>
+
+            <!-- Meal Type Selection -->
+            <div class="section-eyebrow">Meal Classification</div>
+            <div class="meal-type-tabs" id="scanner-meal-tabs">
+              <button type="button" class="meal-type-pill active" data-meal="breakfast" onclick="setMealType('breakfast', this)">
+                <span class="meal-check-indicator">✓</span> <span>🌅 Breakfast</span>
+              </button>
+              <button type="button" class="meal-type-pill" data-meal="lunch" onclick="setMealType('lunch', this)">
+                <span class="meal-check-indicator">✓</span> <span>☀️ Lunch</span>
+              </button>
+              <button type="button" class="meal-type-pill" data-meal="dinner" onclick="setMealType('dinner', this)">
+                <span class="meal-check-indicator">✓</span> <span>🌙 Dinner</span>
+              </button>
+              <button type="button" class="meal-type-pill" data-meal="snack" onclick="setMealType('snack', this)">
+                <span class="meal-check-indicator">✓</span> <span>🍎 Snack</span>
+              </button>
+            </div>
+
+            <button type="button" class="btn btn-primary btn-block" onclick="logScannedMealToDiary()">
+              <span>✅</span> <span>Add to Daily History</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-block" onclick="resetScanner()" style="margin-top:10px;">
+              <span>📸</span> <span>Scan Another Meal</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── TAB 2: FOOD SEARCH ── -->
+      <div class="foodlog-panel" id="foodlog-panel-search" style="display:none;">
+        <div class="foodlog-method-hint">
+          <span class="hint-icon">🔍</span>
+          <div>
+            <div class="hint-title">Search from our Indian food database</div>
+            <div class="hint-desc">Type the name of any Indian dish, ingredient, or snack. Select it to log calories and macros to your diary.</div>
+          </div>
+        </div>
+
+        <div class="surface-card">
+          <div class="search-bar-wrapper">
+            <span class="search-leading-icon">🔍</span>
+            <input type="text" class="field-input search-input-field" id="search-text-input" placeholder="Search dish (e.g. biryani, dal tadka, paneer, poha, dosa)..." oninput="onSearchInputChange(this.value)">
+            <button type="button" class="search-clear-btn" onclick="clearSearchField()">✕</button>
+          </div>
+
+          <!-- Category Filters -->
+          <div class="category-filter-strip">
+            <button type="button" class="cat-filter-btn active" onclick="filterSearchCategory('all', this)">All Items</button>
+            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('high_protein', this)">🥩 High Protein</button>
+            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('breakfast', this)">🥞 Breakfast</button>
+            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('curry', this)">🍲 Curries &amp; Dals</button>
+            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('rice', this)">🍚 Rice &amp; Biryani</button>
+            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('snacks', this)">🥟 Snacks</button>
+            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('dairy', this)">🥛 Dairy</button>
+          </div>
+
+          <div class="search-results-container" id="search-results-list"></div>
+        </div>
+
+        <!-- Manual Item Portion Calculator Card -->
+        <div class="surface-card" id="manual-portion-card" style="display:none;">
+          <div class="card-header">
+            <h3 id="manual-dish-name" style="font-size:1.3rem;font-weight:700;">—</h3>
+          </div>
+
           <div class="macro-metric-grid">
             <div class="macro-metric-box">
-              <div class="macro-metric-val cal" id="metric-val-cal">0</div>
+              <div class="macro-metric-val cal" id="m-val-cal">0</div>
               <div class="macro-metric-lbl">Calories</div>
             </div>
             <div class="macro-metric-box">
-              <div class="macro-metric-val pro" id="metric-val-pro">0g</div>
+              <div class="macro-metric-val pro" id="m-val-pro">0g</div>
               <div class="macro-metric-lbl">Protein</div>
             </div>
             <div class="macro-metric-box">
-              <div class="macro-metric-val car" id="metric-val-car">0g</div>
+              <div class="macro-metric-val car" id="m-val-car">0g</div>
               <div class="macro-metric-lbl">Carbs</div>
             </div>
             <div class="macro-metric-box">
-              <div class="macro-metric-val fat" id="metric-val-fat">0g</div>
+              <div class="macro-metric-val fat" id="m-val-fat">0g</div>
               <div class="macro-metric-lbl">Fat</div>
             </div>
           </div>
 
-          <!-- Indian Portion Presets -->
-          <div class="portion-selector-card">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span class="field-label" style="margin:0;">Serving Portion</span>
-              <span id="portion-display-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
-            </div>
-
-            <div class="presets-grid">
-              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(50, this)">🖐️ Small Snack (50g)</button>
-              <button type="button" class="preset-chip-btn active" onclick="setPortionPreset(100, this)">🥣 Small Katori (100g)</button>
-              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(125, this)">🍽️ Half Plate (125g)</button>
-              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(150, this)">🥣 Medium Katori (150g)</button>
-              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(250, this)">🍽️ Full Plate (250g)</button>
-              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(350, this)">🍱 Large Thali (350g)</button>
-            </div>
-
-            <input type="range" id="portion-slider-input" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);" oninput="updatePortionMetrics(this.value)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span class="field-label" style="margin:0;">Custom Serving</span>
+            <span id="manual-serving-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
           </div>
+          <input type="range" id="manual-grams-slider" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);margin-bottom:16px;" oninput="updateManualServing(this.value)">
 
-          <!-- Meal Type Selection -->
-          <div class="section-eyebrow">Meal Classification</div>
-          <div class="meal-type-tabs" id="scanner-meal-tabs">
+          <div class="section-eyebrow">Select Meal</div>
+          <div class="meal-type-tabs" id="manual-meal-tabs">
             <button type="button" class="meal-type-pill active" data-meal="breakfast" onclick="setMealType('breakfast', this)">
               <span class="meal-check-indicator">✓</span> <span>🌅 Breakfast</span>
             </button>
@@ -346,100 +467,68 @@
             </button>
           </div>
 
-          <button type="button" class="btn btn-primary btn-block" onclick="logScannedMealToDiary()">
+          <button type="button" class="btn btn-primary btn-block" onclick="logManualSearchMeal()">
+            <span>✅</span> <span>Add to History</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── TAB 3: BARCODE SCANNER ── -->
+      <div class="foodlog-panel" id="foodlog-panel-barcode" style="display:none;">
+        <div class="foodlog-method-hint">
+          <span class="hint-icon">📦</span>
+          <div>
+            <div class="hint-title">Scan your packed food's barcode</div>
+            <div class="hint-desc">Point your camera at the barcode on any packaged product — Amul, Maggi, Lay's, Britannia, and more. Works with Indian FMCG brands.</div>
+          </div>
+        </div>
+
+        <div class="surface-card">
+          <div id="barcode-inline-viewport" style="width:100%;height:240px;position:relative;border-radius:var(--radius-md);overflow:hidden;background:#000;border:1px solid var(--border-subtle);margin-bottom:16px;"></div>
+
+          <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="startInlineBarcodeScanner()">📷 Start Camera</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTorchlight()">🔦 Flashlight</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('barcode-photo-input').click()">🖼️ Upload Photo</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('package-ocr-input').click()">🏷️ Package OCR</button>
+          </div>
+
+          <input type="file" id="barcode-photo-input" accept="image/*" style="display:none;" onchange="handlePackageImageUpload(event)">
+          <input type="file" id="package-ocr-input" accept="image/*" style="display:none;" onchange="handlePackageImageUpload(event)">
+
+          <div class="barcode-manual-row">
+            <span style="font-size:0.82rem;color:var(--text-secondary);">Or enter barcode number manually:</span>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <input type="text" class="field-input" id="manual-barcode-digits" placeholder="e.g. 8901030855480" style="font-family:var(--font-mono);font-size:0.85rem;" onkeydown="if(event.key==='Enter') lookupManualBarcodeString()">
+              <button type="button" class="btn btn-primary btn-sm" onclick="lookupManualBarcodeString()">Lookup</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Barcode Result (inline, no modal) -->
+        <div class="surface-card" id="barcode-inline-result" style="display:none;">
+          <div class="section-eyebrow" id="bc-brand-badge-inline">PACKAGED PRODUCT</div>
+          <h3 id="bc-item-name-inline" style="font-size:1.2rem;font-weight:700;margin-bottom:14px;">—</h3>
+
+          <div class="macro-metric-grid">
+            <div class="macro-metric-box"><div class="macro-metric-val cal" id="bc-val-cal-inline">0</div><div class="macro-metric-lbl">Cal</div></div>
+            <div class="macro-metric-box"><div class="macro-metric-val pro" id="bc-val-pro-inline">0g</div><div class="macro-metric-lbl">Pro</div></div>
+            <div class="macro-metric-box"><div class="macro-metric-val car" id="bc-val-car-inline">0g</div><div class="macro-metric-lbl">Carb</div></div>
+            <div class="macro-metric-box"><div class="macro-metric-val fat" id="bc-val-fat-inline">0g</div><div class="macro-metric-lbl">Fat</div></div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span class="field-label" style="margin:0;">Portion (g / ml)</span>
+            <span id="bc-serving-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
+          </div>
+          <input type="range" id="bc-serving-slider" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);margin-bottom:16px;" oninput="updateBarcodeServing(this.value)">
+
+          <button type="button" class="btn btn-primary btn-block" onclick="logBarcodeItemToDiary()">
             <span>✅</span> <span>Add to Daily History</span>
           </button>
-          <button type="button" class="btn btn-secondary btn-block" onclick="resetScanner()" style="margin-top:10px;">
-            <span>📸</span> <span>Scan Another Meal</span>
-          </button>
         </div>
-
-      </div>
-    </main>
-
-    <!-- ==========================================================================
-         SCREEN 3: NUTRITION (DATABASE SEARCH)
-         ========================================================================== -->
-    <main class="screen-view" id="screen-nutrition">
-      <div class="surface-card">
-        <div class="card-header">
-          <div class="card-title-group">
-            <div class="section-eyebrow">Verified Food Database</div>
-            <div class="card-title">Search Indian Foods & Ingredients</div>
-          </div>
-        </div>
-
-        <div class="search-bar-wrapper">
-          <span class="search-leading-icon">🔍</span>
-          <input type="text" class="field-input search-input-field" id="search-text-input" placeholder="Search dish (e.g. biryani, dal tadka, paneer, poha, dosa)..." oninput="onSearchInputChange(this.value)">
-          <button type="button" class="search-clear-btn" onclick="clearSearchField()">✕</button>
-        </div>
-
-        <!-- Category Filters -->
-        <div class="category-filter-strip">
-          <button type="button" class="cat-filter-btn active" onclick="filterSearchCategory('all', this)">All Items</button>
-          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('high_protein', this)">🥩 High Protein</button>
-          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('breakfast', this)">🥞 Breakfast</button>
-          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('curry', this)">🍲 Curries & Dals</button>
-          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('rice', this)">🍚 Rice & Biryani</button>
-          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('snacks', this)">🥟 Snacks</button>
-          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('dairy', this)">🥛 Dairy</button>
-        </div>
-
-        <div class="search-results-container" id="search-results-list"></div>
       </div>
 
-      <!-- Manual Item Portion Calculator Card -->
-      <div class="surface-card" id="manual-portion-card" style="display:none;">
-        <div class="card-header">
-          <h3 id="manual-dish-name" style="font-size:1.3rem;font-weight:700;">—</h3>
-        </div>
-
-        <div class="macro-metric-grid">
-          <div class="macro-metric-box">
-            <div class="macro-metric-val cal" id="m-val-cal">0</div>
-            <div class="macro-metric-lbl">Calories</div>
-          </div>
-          <div class="macro-metric-box">
-            <div class="macro-metric-val pro" id="m-val-pro">0g</div>
-            <div class="macro-metric-lbl">Protein</div>
-          </div>
-          <div class="macro-metric-box">
-            <div class="macro-metric-val car" id="m-val-car">0g</div>
-            <div class="macro-metric-lbl">Carbs</div>
-          </div>
-          <div class="macro-metric-box">
-            <div class="macro-metric-val fat" id="m-val-fat">0g</div>
-            <div class="macro-metric-lbl">Fat</div>
-          </div>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span class="field-label" style="margin:0;">Custom Serving</span>
-          <span id="manual-serving-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
-        </div>
-        <input type="range" id="manual-grams-slider" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);margin-bottom:16px;" oninput="updateManualServing(this.value)">
-
-        <div class="section-eyebrow">Select Meal</div>
-        <div class="meal-type-tabs" id="manual-meal-tabs">
-          <button type="button" class="meal-type-pill active" data-meal="breakfast" onclick="setMealType('breakfast', this)">
-            <span class="meal-check-indicator">✓</span> <span>🌅 Breakfast</span>
-          </button>
-          <button type="button" class="meal-type-pill" data-meal="lunch" onclick="setMealType('lunch', this)">
-            <span class="meal-check-indicator">✓</span> <span>☀️ Lunch</span>
-          </button>
-          <button type="button" class="meal-type-pill" data-meal="dinner" onclick="setMealType('dinner', this)">
-            <span class="meal-check-indicator">✓</span> <span>🌙 Dinner</span>
-          </button>
-          <button type="button" class="meal-type-pill" data-meal="snack" onclick="setMealType('snack', this)">
-            <span class="meal-check-indicator">✓</span> <span>🍎 Snack</span>
-          </button>
-        </div>
-
-        <button type="button" class="btn btn-primary btn-block" onclick="logManualSearchMeal()">
-          <span>✅</span> <span>Add to History</span>
-        </button>
-      </div>
     </main>
 
     <!-- ==========================================================================
@@ -478,7 +567,7 @@
       <div id="history-timeline-container"></div>
 
       <div style="display:flex;gap:10px;margin-top:16px;">
-        <button type="button" class="btn btn-primary" onclick="showScreen('scanner')">📸 Scan More Food</button>
+        <button type="button" class="btn btn-primary" onclick="showScreen('foodlog'); setFoodLogTab('scan')">📸 Log More Food</button>
         <button type="button" class="btn btn-secondary" onclick="copyHistorySummary()">📋 Copy Summary</button>
       </div>
     </main>
@@ -581,7 +670,7 @@
           <div class="preset-chip-btn goal-option-card active" data-goal="fat_loss" onclick="selectGoal('fat_loss')" style="padding:14px 8px;text-align:center;">
             <div style="font-size:1.4rem;margin-bottom:4px;">🔥</div>
             <div style="font-weight:700;font-size:0.85rem;">Fat Loss</div>
-            <div style="font-size:0.7rem;color:var(--text-tertiary);">-500 kcal</div>
+            <div style="font-size:0.7rem;color:var(--text-tertiary);-500 kcal</div>
           </div>
           <div class="preset-chip-btn goal-option-card" data-goal="maintain" onclick="selectGoal('maintain')" style="padding:14px 8px;text-align:center;">
             <div style="font-size:1.4rem;margin-bottom:4px;">⚖️</div>
@@ -668,13 +757,9 @@
       <span class="mobile-icon">🏠</span>
       <span class="mobile-label">Home</span>
     </button>
-    <button type="button" class="mobile-nav-item" data-screen="scanner" onclick="showScreen('scanner')">
-      <span class="mobile-icon">📸</span>
-      <span class="mobile-label">Scan</span>
-    </button>
-    <button type="button" class="mobile-nav-item" data-screen="nutrition" onclick="showScreen('nutrition')">
-      <span class="mobile-icon">🔍</span>
-      <span class="mobile-label">Search</span>
+    <button type="button" class="mobile-nav-item" data-screen="foodlog" onclick="showScreen('foodlog')">
+      <span class="mobile-icon">🍽️</span>
+      <span class="mobile-label">Food Log</span>
     </button>
     <button type="button" class="mobile-nav-item" data-screen="history" onclick="showScreen('history')">
       <span class="mobile-icon">📔</span>
@@ -694,7 +779,7 @@
        MODALS
        ========================================================================== -->
 
-  <!-- BARCODE & FMCG MODAL -->
+  <!-- BARCODE & FMCG MODAL (kept for backwards compat, but inline barcode is now on Food Log) -->
   <div class="modal-backdrop" id="barcode-scan-modal">
     <div class="modal-dialog" style="text-align:center;">
       <button type="button" class="modal-close-icon" onclick="closeBarcodeModal()">✕</button>
@@ -709,11 +794,8 @@
         <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('package-ocr-input').click()">🏷️ Package OCR</button>
       </div>
 
-      <input type="file" id="barcode-photo-input" accept="image/*" style="display:none;" onchange="handlePackageImageUpload(event)">
-      <input type="file" id="package-ocr-input" accept="image/*" style="display:none;" onchange="handlePackageImageUpload(event)">
-
       <div style="display:flex;gap:8px;margin-top:10px;">
-        <input type="text" class="field-input" id="manual-barcode-digits" placeholder="Enter barcode number..." style="font-family:var(--font-mono);font-size:0.85rem;" onkeydown="if(event.key==='Enter') lookupManualBarcodeString()">
+        <input type="text" class="field-input" id="modal-barcode-digits" placeholder="Enter barcode number..." style="font-family:var(--font-mono);font-size:0.85rem;" onkeydown="if(event.key==='Enter') lookupManualBarcodeString()">
         <button type="button" class="btn btn-primary btn-sm" onclick="lookupManualBarcodeString()">Lookup</button>
       </div>
     </div>
@@ -766,6 +848,6 @@
   </div>
 
   <!-- APPLICATION JAVASCRIPT -->
-  <script src="/static/js/app.js?v=2.1"></script>
+  <script src="/static/js/app.js?v=2.2"></script>
 </body>
 </html>
