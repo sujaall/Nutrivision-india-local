@@ -1,2355 +1,771 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>NutriVision India</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Segoe UI',sans-serif;background:#0a0f1e;color:#e2e8f0;min-height:100vh;}
-.nav{background:#0d1117;border-bottom:1px solid #1e293b;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;}
-.nav-logo{font-size:1.1rem;font-weight:800;background:linear-gradient(135deg,#f97316,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.nav-tabs{display:flex;gap:4px;}
-.nav-tab{background:none;border:none;color:#64748b;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:0.8rem;font-weight:600;transition:all 0.2s;}
-.nav-tab.active{background:#1e293b;color:#f97316;}
-.screen{display:none;padding:20px 16px;max-width:800px;margin:0 auto;}
-.screen.active{display:block;}
-.card{background:#111827;border-radius:16px;padding:20px;margin-bottom:16px;border:1px solid #1e293b;}
-.card-title{font-size:0.7rem;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;}
-.form-group{margin-bottom:14px;}
-.form-label{font-size:0.82rem;color:#94a3b8;margin-bottom:6px;display:block;}
-.form-input{width:100%;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:11px 14px;color:#e2e8f0;font-size:0.9rem;outline:none;transition:border-color 0.2s;}
-.form-input:focus{border-color:#f97316;}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.form-select{width:100%;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:11px 14px;color:#e2e8f0;font-size:0.9rem;outline:none;}
-.goal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
-.goal-btn{background:#0f172a;border:2px solid #1e293b;border-radius:12px;padding:14px 8px;cursor:pointer;text-align:center;transition:all 0.2s;}
-.goal-btn.selected{border-color:#f97316;background:#1a1200;}
-.goal-icon{font-size:1.5rem;margin-bottom:6px;}
-.goal-label{font-size:0.75rem;color:#94a3b8;font-weight:600;}
-.goal-btn.selected .goal-label{color:#fbbf24;}
-.activity-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
-.activity-btn{background:#0f172a;border:2px solid #1e293b;border-radius:10px;padding:10px;cursor:pointer;transition:all 0.2s;}
-.activity-btn.selected{border-color:#f97316;background:#1a1200;}
-.act-name{font-size:0.82rem;font-weight:600;color:#cbd5e1;}
-.act-desc{font-size:0.7rem;color:#64748b;margin-top:2px;}
-.activity-btn.selected .act-name{color:#fbbf24;}
-.btn{background:linear-gradient(135deg,#f97316,#ef4444);color:white;border:none;padding:13px 24px;border-radius:50px;font-size:0.9rem;font-weight:700;cursor:pointer;width:100%;transition:transform 0.2s;}
-.btn:hover{transform:scale(1.02);}
-.btn-secondary{background:#1e293b;color:#94a3b8;}
-.tdee-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
-.tdee-card{background:#0f172a;border-radius:12px;padding:16px;text-align:center;border:1px solid #1e293b;}
-.tdee-value{font-size:1.8rem;font-weight:800;}
-.tdee-label{font-size:0.72rem;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:0.05em;}
-.tdee-cal .tdee-value{color:#f97316;}
-.tdee-pro .tdee-value{color:#3b82f6;}
-.tdee-car .tdee-value{color:#a855f7;}
-.tdee-fat .tdee-value{color:#eab308;}
-.progress-item{margin-bottom:12px;}
-.progress-header{display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.82rem;}
-.progress-label{color:#94a3b8;}
-.progress-numbers{color:#64748b;}
-.progress-bar-bg{background:#0f172a;border-radius:99px;height:8px;overflow:hidden;}
-.progress-bar-fill{height:100%;border-radius:99px;transition:width 0.5s;}
-.fill-cal{background:linear-gradient(90deg,#f97316,#fbbf24);}
-.fill-pro{background:linear-gradient(90deg,#3b82f6,#06b6d4);}
-.fill-car{background:linear-gradient(90deg,#a855f7,#ec4899);}
-.fill-fat{background:linear-gradient(90deg,#eab308,#f97316);}
-.weight-status{border-radius:12px;padding:14px 16px;margin-bottom:16px;text-align:center;}
-.status-surplus{background:#14532d;border:1px solid #166534;}
-.status-deficit{background:#7f1d1d;border:1px solid #991b1b;}
-.status-maintain{background:#1e3a5f;border:1px solid #1d4ed8;}
-.status-title{font-size:1rem;font-weight:700;margin-bottom:4px;}
-.status-desc{font-size:0.82rem;color:#94a3b8;}
-.upload-zone{border:2px dashed #334155;border-radius:16px;padding:40px 20px;text-align:center;cursor:pointer;transition:all 0.3s;background:#111827;}
-.upload-zone:hover{border-color:#f97316;}
-.upload-icon{font-size:3rem;margin-bottom:12px;}
-.upload-zone h3{color:#cbd5e1;font-size:1.1rem;}
-.upload-zone p{color:#475569;font-size:0.85rem;margin-top:6px;}
-#fileInput{display:none;}
-.preview-img{width:100%;max-height:250px;object-fit:cover;border-radius:12px;margin-bottom:14px;}
-.result-food{font-size:1.6rem;font-weight:800;color:#fbbf24;text-transform:capitalize;margin-bottom:4px;}
-.confidence-tag{display:inline-block;background:#1e293b;border-radius:99px;padding:4px 12px;font-size:0.8rem;color:#f97316;font-weight:700;}
-.macro-mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0;}
-.macro-mini{background:#0f172a;border-radius:10px;padding:12px 8px;text-align:center;}
-.macro-mini-val{font-size:1.2rem;font-weight:800;}
-.macro-mini-lbl{font-size:0.65rem;color:#64748b;margin-top:2px;text-transform:uppercase;}
-.m-cal .macro-mini-val{color:#f97316;}
-.m-pro .macro-mini-val{color:#3b82f6;}
-.m-car .macro-mini-val{color:#a855f7;}
-.m-fat .macro-mini-val{color:#eab308;}
-.portion-row{display:flex;align-items:center;gap:12px;margin:12px 0;}
-.portion-row label{color:#94a3b8;font-size:0.82rem;white-space:nowrap;}
-.portion-row input[type=range]{flex:1;accent-color:#f97316;}
-.portion-val{color:#f97316;font-weight:700;font-size:0.9rem;min-width:40px;}
-.meal-type-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0;}
-.meal-type-btn{background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px;cursor:pointer;text-align:center;font-size:0.75rem;color:#64748b;transition:all 0.2s;}
-.meal-type-btn.active{border-color:#f97316;color:#fbbf24;background:#1a1200;}
-.spinner{width:40px;height:40px;border:3px solid #1e293b;border-top:3px solid #f97316;border-radius:50%;animation:spin 0.9s linear infinite;margin:0 auto 12px;}
-@keyframes spin{to{transform:rotate(360deg);}}
-.diary-entry{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #1e293b;}
-.diary-entry:last-child{border-bottom:none;}
-.entry-food{font-size:0.9rem;font-weight:600;text-transform:capitalize;color:#cbd5e1;}
-.entry-meta{font-size:0.75rem;color:#64748b;margin-top:2px;}
-.entry-cal{font-size:0.9rem;font-weight:700;color:#f97316;}
-.meal-section-title{font-size:0.7rem;color:#f97316;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin:14px 0 8px;}
-.empty-diary{text-align:center;padding:30px;color:#475569;}
-.empty-icon{font-size:2.5rem;margin-bottom:10px;}
-.insight-box{background:#0f172a;border-radius:10px;padding:11px 14px;margin-bottom:8px;font-size:0.85rem;border-left:3px solid #f97316;line-height:1.5;}
-.loading-box{text-align:center;padding:30px;}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#166534;color:#86efac;padding:10px 24px;border-radius:99px;font-size:0.85rem;font-weight:600;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;white-space:nowrap;}
-.toast.show{opacity:1;}
-.scan-tab {
-  flex:1; background:#0f172a; border:1px solid #1e293b;
-  border-radius:10px; padding:10px; color:#64748b;
-  font-size:0.85rem; font-weight:600; cursor:pointer;
-  transition:all 0.2s;
-}
-.scan-tab.active {
-  border-color:#f97316; color:#f97316; background:#1a1200;
-}
-.search-item {
-  padding:12px; border-radius:10px; background:#0f172a;
-  border:1px solid #1e293b; margin-bottom:8px; cursor:pointer;
-  transition:all 0.2s;
-}
-.search-item:hover { border-color:#f97316; }
-.search-item-name {
-  font-size:0.9rem; font-weight:600; text-transform:capitalize;
-  color:#cbd5e1;
-}
-.search-item-cal {
-  font-size:0.75rem; color:#64748b; margin-top:3px;
-}
-.barcode-btn {
-  background:linear-gradient(135deg,#7c3aed,#4f46e5);
-  color:white; border:none; padding:13px 24px;
-  border-radius:50px; font-size:0.9rem; font-weight:700;
-  cursor:pointer; width:100%; margin-bottom:12px;
-  transition:transform 0.2s;
-  display:flex; align-items:center; justify-content:center; gap:8px;
-  box-shadow:0 4px 15px rgba(124,58,237,0.35);
-}
-.barcode-btn:hover { transform:scale(1.02); }
-
-#barcode-modal {
-  display:none; position:fixed; top:0; left:0;
-  width:100%; height:100%; background:rgba(0,0,0,0.92);
-  backdrop-filter:blur(6px);
-  z-index:1000; flex-direction:column;
-  align-items:center; justify-content:center;
-  padding:16px;
-}
-#barcode-modal.open { display:flex; }
-
-.barcode-scanner-card {
-  background:#111827;
-  border:1px solid #334155;
-  border-radius:20px;
-  padding:22px;
-  max-width:440px;
-  width:100%;
-  box-shadow:0 20px 50px rgba(0,0,0,0.6);
-  text-align:center;
-  position:relative;
-}
-
-#barcode-viewport {
-  width:100%; height:230px; position:relative;
-  border-radius:14px;
-  overflow:hidden;
-  background:#000;
-  margin:12px 0;
-  border:2px solid #334155;
-}
-#barcode-viewport canvas,
-#barcode-viewport video {
-  width:100% !important;
-  height:100% !important;
-  object-fit:cover;
-}
-
-.barcode-guide {
-  position:absolute;
-  top:50%; left:50%;
-  transform:translate(-50%, -50%);
-  width:82%; height:62%;
-  border:2px solid rgba(249, 115, 22, 0.85);
-  border-radius:12px;
-  box-shadow:0 0 0 9999px rgba(0, 0, 0, 0.45);
-  pointer-events:none;
-}
-.barcode-guide::before {
-  content:'';
-  position:absolute;
-  top:0; left:0; right:0; height:2.5px;
-  background:linear-gradient(90deg, transparent, #ef4444, #fbbf24, #f97316, transparent);
-  box-shadow:0 0 12px #f97316;
-  animation:laserScan 2s infinite ease-in-out;
-}
-@keyframes laserScan {
-  0% { top:6%; opacity:0.3; }
-  50% { top:94%; opacity:1; }
-  100% { top:6%; opacity:0.3; }
-}
-
-.barcode-toolbar {
-  display:flex;
-  justify-content:center;
-  gap:8px;
-  margin:10px 0;
-  flex-wrap:wrap;
-}
-.barcode-tool-btn {
-  background:#1e293b;
-  border:1px solid #334155;
-  color:#cbd5e1;
-  padding:7px 13px;
-  border-radius:10px;
-  font-size:0.76rem;
-  font-weight:600;
-  cursor:pointer;
-  transition:all 0.2s;
-  display:flex;
-  align-items:center;
-  gap:5px;
-}
-.barcode-tool-btn:hover {
-  border-color:#f97316;
-  color:#fbbf24;
-}
-
-.barcode-manual-box {
-  margin-top:12px;
-  display:flex;
-  gap:8px;
-  text-align:left;
-}
-.barcode-manual-input {
-  flex:1;
-  background:#0f172a;
-  border:1px solid #1e293b;
-  border-radius:10px;
-  padding:10px 14px;
-  color:#e2e8f0;
-  font-size:0.85rem;
-  outline:none;
-  font-family:monospace;
-}
-.barcode-manual-input:focus {
-  border-color:#7c3aed;
-}
-.barcode-manual-btn {
-  background:linear-gradient(135deg,#7c3aed,#4f46e5);
-  color:white;
-  border:none;
-  border-radius:10px;
-  padding:10px 16px;
-  font-size:0.82rem;
-  font-weight:700;
-  cursor:pointer;
-  transition:transform 0.2s;
-}
-.barcode-manual-btn:hover {
-  transform:scale(1.03);
-}
-
-#barcode-result-card {
-  display:none;
-}
-
-/* ============ AI HEALTH COACH & CHAT STYLES ============ */
-.coach-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.coach-badge {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.coach-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f97316, #ef4444);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.35);
-}
-.coach-title-box h3 {
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: #f8fafc;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.coach-status-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: #22c55e;
-  border-radius: 50%;
-  box-shadow: 0 0 8px #22c55e;
-}
-.coach-status-text {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 2px;
-}
-.coach-actions {
-  display: flex;
-  gap: 8px;
-}
-.coach-btn-icon {
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  color: #cbd5e1;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.coach-btn-icon:hover {
-  border-color: #f97316;
-  color: #fbbf24;
-  background: #1a1200;
-}
-
-/* LIVE NUTRITION CONTEXT BAR */
-.coach-context-bar {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.8));
-  border: 1px solid rgba(249, 115, 22, 0.3);
-  border-radius: 14px;
-  padding: 12px 16px;
-  margin-bottom: 14px;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  text-align: center;
-}
-.coach-ctx-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.coach-ctx-lbl {
-  color: #64748b;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-.coach-ctx-val {
-  font-weight: 800;
-  font-size: 0.88rem;
-  color: #f8fafc;
-}
-.coach-ctx-val.accent-cal { color: #f97316; }
-.coach-ctx-val.accent-pro { color: #3b82f6; }
-.coach-ctx-val.accent-car { color: #a855f7; }
-.coach-ctx-val.accent-fat { color: #eab308; }
-
-/* CHAT CONTAINER */
-.chat-window {
-  background: #0b0f19;
-  border: 1px solid #1e293b;
-  border-radius: 18px;
-  display: flex;
-  flex-direction: column;
-  height: 520px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-}
-.chat-messages {
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  scroll-behavior: smooth;
-}
-.chat-messages::-webkit-scrollbar {
-  width: 5px;
-}
-.chat-messages::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
-}
-.chat-bubble-row {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  max-width: 90%;
-  animation: fadeInMsg 0.25s ease-out;
-}
-@keyframes fadeInMsg {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.chat-bubble-row.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
-.chat-bubble-row.coach {
-  align-self: flex-start;
-}
-.bubble-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.bubble-avatar.coach-ava {
-  background: linear-gradient(135deg, #1e293b, #0f172a);
-  border: 1px solid #334155;
-  color: #fbbf24;
-}
-.bubble-avatar.user-ava {
-  background: linear-gradient(135deg, #f97316, #ef4444);
-  color: white;
-}
-.bubble-content {
-  padding: 12px 16px;
-  border-radius: 16px;
-  font-size: 0.88rem;
-  line-height: 1.55;
-  word-break: break-word;
-}
-.chat-bubble-row.user .bubble-content {
-  background: linear-gradient(135deg, #ea580c, #dc2626);
-  color: #ffffff;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25);
-}
-.chat-bubble-row.coach .bubble-content {
-  background: #131d2e;
-  border: 1px solid #1e293b;
-  color: #e2e8f0;
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-}
-
-/* BUBBLE MARKDOWN TYPOGRAPHY */
-.bubble-content p {
-  margin-bottom: 8px;
-}
-.bubble-content p:last-child {
-  margin-bottom: 0;
-}
-.bubble-content ul, .bubble-content ol {
-  margin: 6px 0 8px 18px;
-}
-.bubble-content li {
-  margin-bottom: 4px;
-}
-.bubble-content strong {
-  color: #fbbf24;
-  font-weight: 700;
-}
-.chat-bubble-row.user .bubble-content strong {
-  color: #ffffff;
-}
-.bubble-content h4, .bubble-content h5 {
-  color: #f97316;
-  margin: 8px 0 4px;
-  font-size: 0.95rem;
-}
-.bubble-content code {
-  background: rgba(0, 0, 0, 0.35);
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 0.82rem;
-  color: #38bdf8;
-  font-family: monospace;
-}
-.bubble-time {
-  font-size: 0.65rem;
-  color: #64748b;
-  margin-top: 4px;
-}
-.chat-bubble-row.user .bubble-time {
-  text-align: right;
-  color: #cbd5e1;
-}
-
-/* TYPING INDICATOR */
-.typing-dots {
-  display: flex;
-  gap: 5px;
-  padding: 6px 8px;
-  align-items: center;
-}
-.typing-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #f97316;
-  opacity: 0.4;
-  animation: typingBounce 1.4s infinite ease-in-out both;
-}
-.typing-dot:nth-child(1) { animation-delay: -0.32s; }
-.typing-dot:nth-child(2) { animation-delay: -0.16s; }
-@keyframes typingBounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1.1); opacity: 1; background: #fbbf24; }
-}
-
-/* QUICK PROMPT CHIPS */
-.prompt-chips-wrapper {
-  padding: 10px 14px;
-  background: #080c14;
-  border-top: 1px solid #1e293b;
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: none;
-}
-.prompt-chips-wrapper::-webkit-scrollbar {
-  display: none;
-}
-.prompt-chip {
-  background: #0f172a;
-  border: 1px solid #1e293b;
-  color: #94a3b8;
-  padding: 7px 14px;
-  border-radius: 99px;
-  font-size: 0.76rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-.prompt-chip:hover {
-  border-color: #f97316;
-  color: #fbbf24;
-  background: #1a1200;
-  transform: translateY(-1px);
-}
-
-/* CHAT INPUT AREA */
-.chat-input-bar {
-  padding: 12px 14px;
-  background: #0f172a;
-  border-top: 1px solid #1e293b;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.chat-input {
-  flex: 1;
-  background: #080c14;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 11px 16px;
-  color: #f1f5f9;
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.2s;
-  font-family: inherit;
-}
-.chat-input:focus {
-  border-color: #f97316;
-}
-.chat-send-btn {
-  background: linear-gradient(135deg, #f97316, #ef4444);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition: transform 0.2s;
-  flex-shrink: 0;
-}
-.chat-send-btn:hover {
-  transform: scale(1.05);
-}
-.chat-send-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* GEMINI API KEY MODAL */
-.custom-modal {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(5px);
-  z-index: 1000;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.custom-modal.open {
-  display: flex;
-}
-.modal-box {
-  background: #111827;
-  border: 1px solid #334155;
-  border-radius: 20px;
-  padding: 24px;
-  max-width: 500px;
-  width: 100%;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
-  position: relative;
-}
-.modal-close-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  background: #1e293b;
-  border: none;
-  color: #94a3b8;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 0.95rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-.modal-close-btn:hover {
-  color: white;
-  background: #334155;
-}
-.api-badge {
-  display: inline-block;
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
-  padding: 3px 10px;
-  border-radius: 99px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NutriVision India — Intelligent Nutrition & Diet Platform</title>
+  
+  <!-- Modern Typography (Outfit + Inter) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Quagga Barcode Engine -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
 
-<div class="nav">
-  <div class="nav-logo">🍛 NutriVision</div>
-  <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showScreen('dashboard')" title="Dashboard">🏠</button>
-    <button class="nav-tab" onclick="showScreen('scanner')" title="Scan Food">📸</button>
-    <button class="nav-tab" onclick="showScreen('diary')" title="Food Diary">📔</button>
-    <button class="nav-tab" onclick="showScreen('coach')" title="AI Health Coach">💬</button>
-    <button class="nav-tab" onclick="showScreen('profile')" title="Profile">👤</button>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<!-- DASHBOARD -->
-<div class="screen active" id="screen-dashboard">
-  <div id="no-profile-state">
-    <div class="card" style="text-align:center;padding:40px 20px;">
-      <div style="font-size:3rem;margin-bottom:16px;">👋</div>
-      <h2 style="font-size:1.3rem;margin-bottom:8px;">Welcome to NutriVision India</h2>
-      <p style="color:#64748b;font-size:0.9rem;margin-bottom:20px;">Set up your profile to get personalized calorie and macro targets</p>
-      <button class="btn" onclick="showScreen('profile')">Set Up My Profile</button>
-    </div>
-  </div>
-  <div id="has-profile-state" style="display:none;">
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <div>
-          <div style="font-size:1.1rem;font-weight:700;" id="dash-greeting">Good morning!</div>
-          <div style="color:#64748b;font-size:0.8rem;" id="dash-date"></div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:0.7rem;color:#64748b;">GOAL</div>
-          <div style="font-size:0.82rem;font-weight:700;color:#f97316;" id="dash-goal-label"></div>
+  <!-- GLOBAL APP HEADER -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-wrapper" onclick="showScreen('home')">
+        <div class="brand-symbol">🍛</div>
+        <div class="brand-title">
+          NutriVision
+          <span class="brand-tag">India</span>
         </div>
       </div>
-      <div style="text-align:center;margin-bottom:16px;">
-        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.1em;">Calories Remaining</div>
-        <div style="font-size:3rem;font-weight:800;color:#f97316;" id="cal-remaining">—</div>
-        <div style="font-size:0.8rem;color:#64748b;"><span id="cal-eaten">0</span> eaten · <span id="cal-target-small">—</span> target</div>
-      </div>
-      <div class="progress-item">
-        <div class="progress-header"><span class="progress-label">🔥 Calories</span><span class="progress-numbers" id="prog-cal-nums">0 / 0</span></div>
-        <div class="progress-bar-bg"><div class="progress-bar-fill fill-cal" id="prog-cal" style="width:0%"></div></div>
-      </div>
-      <div class="progress-item">
-        <div class="progress-header"><span class="progress-label">💪 Protein</span><span class="progress-numbers" id="prog-pro-nums">0 / 0g</span></div>
-        <div class="progress-bar-bg"><div class="progress-bar-fill fill-pro" id="prog-pro" style="width:0%"></div></div>
-      </div>
-      <div class="progress-item">
-        <div class="progress-header"><span class="progress-label">⚡ Carbs</span><span class="progress-numbers" id="prog-car-nums">0 / 0g</span></div>
-        <div class="progress-bar-bg"><div class="progress-bar-fill fill-car" id="prog-car" style="width:0%"></div></div>
-      </div>
-      <div class="progress-item">
-        <div class="progress-header"><span class="progress-label">🥑 Fat</span><span class="progress-numbers" id="prog-fat-nums">0 / 0g</span></div>
-        <div class="progress-bar-bg"><div class="progress-bar-fill fill-fat" id="prog-fat" style="width:0%"></div></div>
-      </div>
-    </div>
-    <div class="weight-status status-maintain" id="weight-status-box">
-      <div class="status-title" id="weight-status-title">Loading...</div>
-      <div class="status-desc" id="weight-status-desc"></div>
-    </div>
 
-    <!-- COACH DASHBOARD WIDGET -->
-    <div class="card" id="dash-coach-widget" style="cursor:pointer;background:linear-gradient(135deg,rgba(15,23,42,0.95),rgba(30,41,59,0.8));border:1px solid rgba(249,115,22,0.35);transition:all 0.2s;" onclick="showScreen('coach')">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#f97316,#ef4444);display:flex;align-items:center;justify-content:center;font-size:1.15rem;box-shadow:0 2px 10px rgba(249,115,22,0.3);">🤖</div>
+      <!-- Desktop Navigation Bar -->
+      <nav class="desktop-nav">
+        <button type="button" class="nav-link-btn active" data-screen="home" onclick="showScreen('home')">
+          <span class="nav-icon">🏠</span> <span>Home</span>
+        </button>
+        <button type="button" class="nav-link-btn" data-screen="scanner" onclick="showScreen('scanner')">
+          <span class="nav-icon">📸</span> <span>Scan Food</span>
+        </button>
+        <button type="button" class="nav-link-btn" data-screen="nutrition" onclick="showScreen('nutrition')">
+          <span class="nav-icon">🔍</span> <span>Nutrition</span>
+        </button>
+        <button type="button" class="nav-link-btn" data-screen="history" onclick="showScreen('history')">
+          <span class="nav-icon">📔</span> <span>History</span>
+        </button>
+        <button type="button" class="nav-link-btn" data-screen="coach" onclick="showScreen('coach')">
+          <span class="nav-icon">🤖</span> <span>NutriCoach</span>
+        </button>
+        <button type="button" class="nav-link-btn" data-screen="profile" onclick="showScreen('profile')">
+          <span class="nav-icon">👤</span> <span>Profile</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div class="toast-notification" id="app-toast"></div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div class="app-container">
+
+    <!-- ==========================================================================
+         SCREEN 1: HOME / DASHBOARD
+         ========================================================================== -->
+    <main class="screen-view active" id="screen-home">
+      <!-- HERO VALUE PROPOSITION -->
+      <section class="hero-banner">
+        <div class="hero-content">
+          <div class="hero-pill">✨ Intelligent Indian Food Nutrition</div>
+          <h1 class="hero-headline">Know what you eat.</h1>
+          <p class="hero-description">
+            Identify authentic Indian meals, track calories, monitor protein goals, and scan packaged items with deep learning precision.
+          </p>
+          <div class="hero-cta-group">
+            <button type="button" class="btn btn-primary" onclick="showScreen('scanner')">
+              <span>📸</span> <span>Scan Your Food</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="showScreen('nutrition')">
+              <span>🔍</span> <span>Search Foods</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="openBarcodeModal()">
+              <span>📦</span> <span>Scan Barcode</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- FIRST-TIME SETUP BANNER (shown when no profile) -->
+      <div id="hero-profile-cta" style="display:none;">
+        <div class="surface-card" style="text-align:center;padding:36px 20px;">
+          <h3 style="font-size:1.2rem;margin-bottom:6px;">Personalize Your Nutrition Goals</h3>
+          <p style="font-size:0.88rem;margin-bottom:20px;">Set up your height, weight, and fitness goal to calculate exact calories and macros.</p>
+          <button type="button" class="btn btn-primary" onclick="showScreen('profile')">Setup My Profile 👤</button>
+        </div>
+      </div>
+
+      <!-- ACTIVE NUTRITION DASHBOARD -->
+      <div id="dash-active-summary">
+        <!-- Shortcuts Grid -->
+        <div class="shortcuts-grid">
+          <div class="shortcut-card" onclick="showScreen('scanner')">
+            <span class="shortcut-icon">📸</span>
+            <span class="shortcut-title">AI Food Scan</span>
+          </div>
+          <div class="shortcut-card" onclick="openBarcodeModal()">
+            <span class="shortcut-icon">📦</span>
+            <span class="shortcut-title">Barcode OCR</span>
+          </div>
+          <div class="shortcut-card" onclick="showScreen('nutrition')">
+            <span class="shortcut-icon">🔍</span>
+            <span class="shortcut-title">Food Search</span>
+          </div>
+          <div class="shortcut-card" onclick="showScreen('coach')">
+            <span class="shortcut-icon">🤖</span>
+            <span class="shortcut-title">NutriCoach AI</span>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <!-- CALORIE GAUGE CARD -->
+          <div class="surface-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div class="section-eyebrow">Daily Budget</div>
+                <div class="card-title" id="dash-greeting-text">Daily Intake</div>
+              </div>
+              <span class="brand-tag" id="dash-plan-badge">Fat Loss 🔥</span>
+            </div>
+
+            <div class="calorie-overview-card">
+              <div class="calorie-gauge-wrapper">
+                <svg class="calorie-gauge-svg" viewBox="0 0 150 150">
+                  <circle class="gauge-track" cx="75" cy="75" r="66"></circle>
+                  <circle class="gauge-value-ring" id="dash-gauge-fill" cx="75" cy="75" r="66"></circle>
+                </svg>
+                <div class="gauge-center-content">
+                  <div class="gauge-calories-number" id="dash-cal-remaining">—</div>
+                  <div class="gauge-label">kcal left</div>
+                </div>
+              </div>
+
+              <div class="calorie-stats-column">
+                <div class="stat-item-row">
+                  <span class="stat-item-label">Eaten</span>
+                  <span class="stat-item-val" id="dash-cal-eaten">0 kcal</span>
+                </div>
+                <div class="stat-item-row">
+                  <span class="stat-item-label">Daily Target</span>
+                  <span class="stat-item-val" id="dash-cal-target">—</span>
+                </div>
+                <div class="stat-item-row">
+                  <span class="stat-item-label">Date</span>
+                  <span class="stat-item-val" id="dash-date-display">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MACRO METERS CARD -->
+          <div class="surface-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div class="section-eyebrow">Macronutrients</div>
+                <div class="card-title">Nutritional Balance</div>
+              </div>
+            </div>
+
+            <div class="macro-meters-stack">
+              <!-- Protein -->
+              <div class="macro-meter-row">
+                <div class="macro-meter-top">
+                  <span class="macro-name-tag" style="color:var(--color-protein);">💪 Protein</span>
+                  <span class="macro-values" id="dash-pro-nums">0 / 0g</span>
+                </div>
+                <div class="meter-track">
+                  <div class="meter-bar-fill fill-protein" id="dash-pro-fill" style="width:0%"></div>
+                </div>
+              </div>
+
+              <!-- Carbs -->
+              <div class="macro-meter-row">
+                <div class="macro-meter-top">
+                  <span class="macro-name-tag" style="color:var(--color-carbs);">⚡ Carbs</span>
+                  <span class="macro-values" id="dash-car-nums">0 / 0g</span>
+                </div>
+                <div class="meter-track">
+                  <div class="meter-bar-fill fill-carbs" id="dash-car-fill" style="width:0%"></div>
+                </div>
+              </div>
+
+              <!-- Fat -->
+              <div class="macro-meter-row">
+                <div class="macro-meter-top">
+                  <span class="macro-name-tag" style="color:var(--color-fat);">🥑 Healthy Fats</span>
+                  <span class="macro-values" id="dash-fat-nums">0 / 0g</span>
+                </div>
+                <div class="meter-track">
+                  <div class="meter-bar-fill fill-fat" id="dash-fat-fill" style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HYDRATION STRIP CARD -->
+        <div class="surface-card">
+          <div class="hydration-strip">
+            <div class="hydration-info">
+              <div class="hydration-icon-circle">💧</div>
+              <div>
+                <div style="font-weight:700;font-size:0.95rem;">Water Hydration</div>
+                <div style="font-size:0.8rem;color:var(--text-secondary);" id="water-count-display">0 / 3000 ml</div>
+              </div>
+            </div>
+            <div class="hydration-controls">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="addWater(250)">+250 ml (Glass)</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="addWater(500)">+500 ml (Bottle)</button>
+              <button type="button" class="btn btn-subtle btn-sm" onclick="resetWater()" style="color:var(--color-danger);">Reset</button>
+            </div>
+          </div>
+          <div class="meter-track" style="margin-top:14px;">
+            <div class="meter-bar-fill" id="water-gauge-fill" style="background:var(--color-water);width:0%;"></div>
+          </div>
+        </div>
+
+        <!-- STATUS FEEDBACK BANNER -->
+        <div class="surface-card" id="dash-status-box" style="background:var(--bg-surface-subtle);">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="font-size:1.6rem;">⚖️</div>
+            <div>
+              <div style="font-weight:700;font-size:0.95rem;" id="dash-status-title">On Track: Balanced intake</div>
+              <div style="font-size:0.82rem;color:var(--text-secondary);" id="dash-status-desc">Log your meals to see live deficit or surplus calculations.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ==========================================================================
+         SCREEN 2: SCAN FOOD (AI VISION)
+         ========================================================================== -->
+    <main class="screen-view" id="screen-scanner">
+      <div class="scanner-container">
+        
+        <!-- Live Camera Stream -->
+        <div class="live-camera-wrapper" id="live-camera-wrapper">
+          <video class="camera-video-feed" id="live-camera-video" autoplay playsinline muted></video>
+          <div class="camera-overlay-controls">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="switchCameraFacing()">🔄 Flip</button>
+            <button type="button" class="shutter-btn" onclick="captureCameraSnapshot()" title="Capture Plate"></button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="stopLiveCamera()">✕ Close</button>
+          </div>
+        </div>
+
+        <!-- Drag & Drop Upload Zone -->
+        <div class="dropzone-box" id="scanner-dropzone" onclick="document.getElementById('food-file-input').click()">
+          <div class="dropzone-icon">📸</div>
+          <h2 class="dropzone-title">Scan your food</h2>
+          <p class="dropzone-hint">Upload a photo and let NutriVision's AI ensemble identify your dish.</p>
+          <div style="display:flex;justify-content:center;gap:10px;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation(); startLiveCamera();">📷 Use Live Camera</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); document.getElementById('food-file-input').click();">📁 Browse File</button>
+          </div>
+        </div>
+
+        <input type="file" id="food-file-input" accept="image/*" style="display:none;" onchange="handleFileInput(event)">
+
+        <!-- Analyzing / Loading Feedback Card -->
+        <div class="surface-card analyzing-box" id="scanner-analyzing-card">
+          <div class="analyzing-scanline"></div>
+          <div class="analyzing-spinner"></div>
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:4px;">Analyzing your meal…</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Ensemble model evaluating Indian food vision features.</p>
+        </div>
+
+        <!-- Prediction & Nutrition Result Card -->
+        <div class="surface-card" id="scanner-result-card" style="display:none;">
+          <div class="result-header">
+            <img src="" id="result-image-element" class="result-image-preview" alt="Food plate preview">
+            <div class="result-meta-column">
+              <span class="confidence-badge" id="result-confidence-badge">High Confidence: 92%</span>
+              <h2 class="result-food-name" id="result-dish-title">—</h2>
+              <div id="result-diet-notes"></div>
+            </div>
+          </div>
+
+          <!-- Alternative Predictions Switcher -->
+          <div class="alternate-predictions-box">
+            <div class="section-eyebrow">Other Likely Matches</div>
+            <div class="alt-chips-container" id="alt-predictions-container"></div>
+          </div>
+
+          <!-- Macro Metric 4-Grid -->
+          <div class="macro-metric-grid">
+            <div class="macro-metric-box">
+              <div class="macro-metric-val cal" id="metric-val-cal">0</div>
+              <div class="macro-metric-lbl">Calories</div>
+            </div>
+            <div class="macro-metric-box">
+              <div class="macro-metric-val pro" id="metric-val-pro">0g</div>
+              <div class="macro-metric-lbl">Protein</div>
+            </div>
+            <div class="macro-metric-box">
+              <div class="macro-metric-val car" id="metric-val-car">0g</div>
+              <div class="macro-metric-lbl">Carbs</div>
+            </div>
+            <div class="macro-metric-box">
+              <div class="macro-metric-val fat" id="metric-val-fat">0g</div>
+              <div class="macro-metric-lbl">Fat</div>
+            </div>
+          </div>
+
+          <!-- Indian Portion Presets -->
+          <div class="portion-selector-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="field-label" style="margin:0;">Serving Portion</span>
+              <span id="portion-display-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
+            </div>
+
+            <div class="presets-grid">
+              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(50, this)">🖐️ Small Snack (50g)</button>
+              <button type="button" class="preset-chip-btn active" onclick="setPortionPreset(100, this)">🥣 Small Katori (100g)</button>
+              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(125, this)">🍽️ Half Plate (125g)</button>
+              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(150, this)">🥣 Medium Katori (150g)</button>
+              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(250, this)">🍽️ Full Plate (250g)</button>
+              <button type="button" class="preset-chip-btn" onclick="setPortionPreset(350, this)">🍱 Large Thali (350g)</button>
+            </div>
+
+            <input type="range" id="portion-slider-input" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);" oninput="updatePortionMetrics(this.value)">
+          </div>
+
+          <!-- Meal Type Selection -->
+          <div class="section-eyebrow">Meal Classification</div>
+          <div class="meal-type-tabs" id="scanner-meal-tabs">
+            <button type="button" class="meal-type-pill active" data-meal="breakfast" onclick="setMealType('breakfast', this)">
+              <span class="meal-check-indicator">✓</span> <span>🌅 Breakfast</span>
+            </button>
+            <button type="button" class="meal-type-pill" data-meal="lunch" onclick="setMealType('lunch', this)">
+              <span class="meal-check-indicator">✓</span> <span>☀️ Lunch</span>
+            </button>
+            <button type="button" class="meal-type-pill" data-meal="dinner" onclick="setMealType('dinner', this)">
+              <span class="meal-check-indicator">✓</span> <span>🌙 Dinner</span>
+            </button>
+            <button type="button" class="meal-type-pill" data-meal="snack" onclick="setMealType('snack', this)">
+              <span class="meal-check-indicator">✓</span> <span>🍎 Snack</span>
+            </button>
+          </div>
+
+          <button type="button" class="btn btn-primary btn-block" onclick="logScannedMealToDiary()">
+            <span>✅</span> <span>Add to Daily History</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-block" onclick="resetScanner()" style="margin-top:10px;">
+            <span>📸</span> <span>Scan Another Meal</span>
+          </button>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- ==========================================================================
+         SCREEN 3: NUTRITION (DATABASE SEARCH)
+         ========================================================================== -->
+    <main class="screen-view" id="screen-nutrition">
+      <div class="surface-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="section-eyebrow">Verified Food Database</div>
+            <div class="card-title">Search Indian Foods & Ingredients</div>
+          </div>
+        </div>
+
+        <div class="search-bar-wrapper">
+          <span class="search-leading-icon">🔍</span>
+          <input type="text" class="field-input search-input-field" id="search-text-input" placeholder="Search dish (e.g. biryani, dal tadka, paneer, poha, dosa)..." oninput="onSearchInputChange(this.value)">
+          <button type="button" class="search-clear-btn" onclick="clearSearchField()">✕</button>
+        </div>
+
+        <!-- Category Filters -->
+        <div class="category-filter-strip">
+          <button type="button" class="cat-filter-btn active" onclick="filterSearchCategory('all', this)">All Items</button>
+          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('high_protein', this)">🥩 High Protein</button>
+          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('breakfast', this)">🥞 Breakfast</button>
+          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('curry', this)">🍲 Curries & Dals</button>
+          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('rice', this)">🍚 Rice & Biryani</button>
+          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('snacks', this)">🥟 Snacks</button>
+          <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('dairy', this)">🥛 Dairy</button>
+        </div>
+
+        <div class="search-results-container" id="search-results-list"></div>
+      </div>
+
+      <!-- Manual Item Portion Calculator Card -->
+      <div class="surface-card" id="manual-portion-card" style="display:none;">
+        <div class="card-header">
+          <h3 id="manual-dish-name" style="font-size:1.3rem;font-weight:700;">—</h3>
+        </div>
+
+        <div class="macro-metric-grid">
+          <div class="macro-metric-box">
+            <div class="macro-metric-val cal" id="m-val-cal">0</div>
+            <div class="macro-metric-lbl">Calories</div>
+          </div>
+          <div class="macro-metric-box">
+            <div class="macro-metric-val pro" id="m-val-pro">0g</div>
+            <div class="macro-metric-lbl">Protein</div>
+          </div>
+          <div class="macro-metric-box">
+            <div class="macro-metric-val car" id="m-val-car">0g</div>
+            <div class="macro-metric-lbl">Carbs</div>
+          </div>
+          <div class="macro-metric-box">
+            <div class="macro-metric-val fat" id="m-val-fat">0g</div>
+            <div class="macro-metric-lbl">Fat</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span class="field-label" style="margin:0;">Custom Serving</span>
+          <span id="manual-serving-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
+        </div>
+        <input type="range" id="manual-grams-slider" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);margin-bottom:16px;" oninput="updateManualServing(this.value)">
+
+        <div class="section-eyebrow">Select Meal</div>
+        <div class="meal-type-tabs" id="manual-meal-tabs">
+          <button type="button" class="meal-type-pill active" data-meal="breakfast" onclick="setMealType('breakfast', this)">
+            <span class="meal-check-indicator">✓</span> <span>🌅 Breakfast</span>
+          </button>
+          <button type="button" class="meal-type-pill" data-meal="lunch" onclick="setMealType('lunch', this)">
+            <span class="meal-check-indicator">✓</span> <span>☀️ Lunch</span>
+          </button>
+          <button type="button" class="meal-type-pill" data-meal="dinner" onclick="setMealType('dinner', this)">
+            <span class="meal-check-indicator">✓</span> <span>🌙 Dinner</span>
+          </button>
+          <button type="button" class="meal-type-pill" data-meal="snack" onclick="setMealType('snack', this)">
+            <span class="meal-check-indicator">✓</span> <span>🍎 Snack</span>
+          </button>
+        </div>
+
+        <button type="button" class="btn btn-primary btn-block" onclick="logManualSearchMeal()">
+          <span>✅</span> <span>Add to History</span>
+        </button>
+      </div>
+    </main>
+
+    <!-- ==========================================================================
+         SCREEN 4: HISTORY / DIARY TIMELINE
+         ========================================================================== -->
+    <main class="screen-view" id="screen-history">
+      <div class="timeline-header-nav">
+        <button type="button" class="btn btn-subtle btn-sm" onclick="navigateHistoryDate(-1)">◀ Yesterday</button>
+        <div class="date-nav-title" id="history-date-title">Today</div>
+        <button type="button" class="btn btn-subtle btn-sm" onclick="navigateHistoryDate(1)">Tomorrow ▶</button>
+      </div>
+
+      <!-- DAILY MACRO TOTALS -->
+      <div class="surface-card" style="padding:16px 20px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">
           <div>
-            <div style="font-size:0.88rem;font-weight:700;color:#f8fafc;">NutriCoach AI Insight</div>
-            <div style="font-size:0.7rem;color:#94a3b8;">Google Gemini Health Coach</div>
+            <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--accent-primary);" id="hist-cal-total">0</div>
+            <div style="font-size:0.68rem;color:var(--text-tertiary);text-transform:uppercase;">Calories</div>
           </div>
-        </div>
-        <span style="font-size:0.75rem;color:#fbbf24;font-weight:700;background:rgba(249,115,22,0.15);padding:4px 10px;border-radius:99px;border:1px solid rgba(249,115,22,0.3);">Chat Now →</span>
-      </div>
-      <p id="dash-coach-tip" style="font-size:0.82rem;color:#cbd5e1;line-height:1.45;margin-top:6px;">
-        👋 Ask your AI coach for personalized Indian meal suggestions, macro balancing, or high-protein snack tips!
-      </p>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Your Daily Targets</div>
-      <div class="tdee-grid">
-        <div class="tdee-card tdee-cal"><div class="tdee-value" id="t-cal">—</div><div class="tdee-label">Calories/day</div></div>
-        <div class="tdee-card tdee-pro"><div class="tdee-value" id="t-pro">—</div><div class="tdee-label">Protein g</div></div>
-        <div class="tdee-card tdee-car"><div class="tdee-value" id="t-car">—</div><div class="tdee-label">Carbs g</div></div>
-        <div class="tdee-card tdee-fat"><div class="tdee-value" id="t-fat">—</div><div class="tdee-label">Fat g</div></div>
-      </div>
-    </div>
-    <button class="btn" onclick="showScreen('scanner')">📸 Scan Food and Log It</button>
-  </div>
-</div>
-
-<!-- SCANNER -->
-<div class="screen" id="screen-scanner">
-  <div id="scan-upload" class="upload-zone" onclick="document.getElementById('fileInput').click()">
-    <div class="upload-icon">📸</div>
-    <h3>Photograph Your Food</h3>
-    <p>Click to upload or drag and drop</p>
-    <p style="margin-top:8px;font-size:0.75rem;color:#334155;">JPG · PNG · WEBP</p>
-  </div>
-  <!-- MANUAL SEARCH TAB -->
-<div style="display:flex;gap:8px;margin-bottom:16px;">
-  <button class="scan-tab active" onclick="switchScanTab(this,'photo')" id="tab-photo">
-    📸 Scan Photo
-  </button>
-  <button class="scan-tab" onclick="switchScanTab(this,'search')" id="tab-search">
-    🔍 Search Food
-  </button>
-</div>
-
-<!-- SEARCH PANEL -->
-<div id="search-panel" style="display:none;">
-  <div class="card">
-    <div style="position:relative;">
-  <input
-    class="form-input"
-    id="food-search-input"
-    type="text"
-    placeholder="Search... biryani, dal, poha"
-    oninput="debounceSearch(this.value)">
-</div>
-    <div id="search-results" style="margin-top:12px;"></div>
-  </div>
-
-  <!-- Manual entry result -->
-  <div class="card" id="manual-entry-card" style="display:none;">
-    <div class="result-food" id="manual-food-name">—</div>
-    <div class="macro-mini-grid">
-      <div class="macro-mini m-cal"><div class="macro-mini-val" id="mr-cal">—</div><div class="macro-mini-lbl">Calories</div></div>
-      <div class="macro-mini m-pro"><div class="macro-mini-val" id="mr-pro">—</div><div class="macro-mini-lbl">Protein g</div></div>
-      <div class="macro-mini m-car"><div class="macro-mini-val" id="mr-car">—</div><div class="macro-mini-lbl">Carbs g</div></div>
-      <div class="macro-mini m-fat"><div class="macro-mini-val" id="mr-fat">—</div><div class="macro-mini-lbl">Fat g</div></div>
-    </div>
-    <div class="portion-row">
-      <label>Amount:</label>
-      <input type="range" id="manualSlider" min="50" max="500"
-        value="100" step="25" oninput="updateManualPortion(this.value)">
-      <span class="portion-val" id="manualLabel">100g</span>
-    </div>
-
-    <!-- Custom gram input -->
-    <div style="margin:10px 0;display:flex;gap:10px;align-items:center;">
-      <span style="color:#94a3b8;font-size:0.82rem;">Or type exact grams:</span>
-      <input type="number" id="customGrams"
-        style="width:90px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:8px;color:#e2e8f0;font-size:0.9rem;"
-        placeholder="150" oninput="updateManualPortion(this.value)">
-      <span style="color:#64748b;font-size:0.85rem;">g</span>
-    </div>
-
-    <div class="card-title" style="margin-top:8px;">Meal Type</div>
-    <div class="meal-type-row">
-      <div class="meal-type-btn active" onclick="selectMeal(this,'breakfast')">🌅 Breakfast</div>
-      <div class="meal-type-btn" onclick="selectMeal(this,'lunch')">☀️ Lunch</div>
-      <div class="meal-type-btn" onclick="selectMeal(this,'dinner')">🌙 Dinner</div>
-      <div class="meal-type-btn" onclick="selectMeal(this,'snack')">🍎 Snack</div>
-    </div>
-    <button class="btn" onclick="logManualMeal()">✅ Add to Diary</button>
-  </div>
-</div>
-  <input type="file" id="fileInput" accept="image/*" capture="environment">
-  <input type="file" id="packageFileInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePackageImageUpload(event)">
-  
-  <!-- BARCODE & PACKAGE SCANNER BUTTONS -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-    <button class="barcode-btn" style="margin-bottom:0;" onclick="openBarcodeScanner()">
-      <span>📦</span> <span>Barcode Scan</span>
-    </button>
-    <button class="barcode-btn" style="margin-bottom:0;background:linear-gradient(135deg,#059669,#0d9488);box-shadow:0 4px 15px rgba(5,150,105,0.35);" onclick="openPackageScanner()">
-      <span>🏷️</span> <span>Packet / Label AI</span>
-    </button>
-  </div>
-
-<!-- Barcode result card -->
-<div class="card" id="barcode-result-card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <div class="result-food" id="barcode-food-name" style="font-size:1.2rem;">—</div>
-    <span style="background:#7c3aed;color:white;font-size:0.7rem;padding:3px 10px;border-radius:99px;font-weight:700;">PACKAGED FOOD</span>
-  </div>
-  <div class="macro-mini-grid">
-    <div class="macro-mini m-cal"><div class="macro-mini-val" id="bc-cal">—</div><div class="macro-mini-lbl">Calories</div></div>
-    <div class="macro-mini m-pro"><div class="macro-mini-val" id="bc-pro">—</div><div class="macro-mini-lbl">Protein g</div></div>
-    <div class="macro-mini m-car"><div class="macro-mini-val" id="bc-car">—</div><div class="macro-mini-lbl">Carbs g</div></div>
-    <div class="macro-mini m-fat"><div class="macro-mini-val" id="bc-fat">—</div><div class="macro-mini-lbl">Fat g</div></div>
-  </div>
-  <div class="portion-row">
-    <label>Portion:</label>
-    <input type="range" id="bcSlider" min="50" max="500"
-      value="100" step="25" oninput="updateBcPortion(this.value)">
-    <span class="portion-val" id="bcLabel">100g</span>
-  </div>
-  <div class="card-title" style="margin-top:14px;">Meal Type</div>
-  <div class="meal-type-row">
-    <div class="meal-type-btn active" onclick="selectMeal(this,'breakfast')">🌅 Breakfast</div>
-    <div class="meal-type-btn" onclick="selectMeal(this,'lunch')">☀️ Lunch</div>
-    <div class="meal-type-btn" onclick="selectMeal(this,'dinner')">🌙 Dinner</div>
-    <div class="meal-type-btn" onclick="selectMeal(this,'snack')">🍎 Snack</div>
-  </div>
-  <button class="btn" onclick="logBarcodeFood()" style="margin-top:12px;">
-    ✅ Add to Diary
-  </button>
-  <button class="btn btn-secondary" onclick="closeBarcodeResult()" style="margin-top:10px;">
-    🔄 Scan Another
-  </button>
-</div>
-
-<!-- Enhanced Barcode camera modal -->
-<div id="barcode-modal">
-  <div class="barcode-scanner-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <div style="font-weight:800;font-size:1.05rem;color:#f8fafc;display:flex;align-items:center;gap:6px;">
-        <span>📦</span> <span>Scan Any Food Barcode</span>
-      </div>
-      <button onclick="closeBarcodeScanner()" style="background:#1e293b;border:none;color:#94a3b8;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:0.95rem;">✕</button>
-    </div>
-    
-    <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:8px;">
-      Instant lookup for Milk, Ice Creams, Indian (890...) & Global Foods
-    </div>
-
-    <div id="barcode-viewport">
-      <div class="barcode-guide"></div>
-    </div>
-
-    <!-- Scanner Action Toolbar -->
-    <div class="barcode-toolbar">
-      <button type="button" class="barcode-tool-btn" id="btn-torch" onclick="toggleTorch()">
-        <span>🔦</span> <span>Flash</span>
-      </button>
-      <button type="button" class="barcode-tool-btn" onclick="document.getElementById('barcodeFileInput').click()">
-        <span>🖼️</span> <span>Upload Photo</span>
-      </button>
-      <button type="button" class="barcode-tool-btn" style="background:#065f46;color:#a7f3d0;border-color:#059669;" onclick="closeBarcodeScanner();openPackageScanner();">
-        <span>🏷️</span> <span>Packet AI</span>
-      </button>
-      <input type="file" id="barcodeFileInput" accept="image/*" style="display:none;" onchange="handleBarcodeImageUpload(event)">
-    </div>
-
-    <!-- Milk & Ice Cream tip banner -->
-    <div style="background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.25);border-radius:10px;padding:8px 10px;font-size:0.75rem;color:#fdba74;margin-top:6px;text-align:left;">
-      💡 <b>Tip for Milk & Ice Cream:</b> If the barcode is curved, glossy, or wrinkled on pouches, flatten the surface or use <b>Upload Photo</b> / <b>Packet AI</b>!
-    </div>
-
-    <!-- Manual digit input fallback -->
-    <div style="margin-top:10px;border-top:1px solid #1e293b;padding-top:10px;">
-      <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:6px;text-align:left;">
-        Or enter barcode numbers directly:
-      </div>
-      <div class="barcode-manual-box">
-        <input type="text" id="manual-barcode-input" class="barcode-manual-input" placeholder="e.g. 8901262010053" onkeydown="if(event.key==='Enter') lookupManualBarcode()">
-        <button type="button" class="barcode-manual-btn" onclick="lookupManualBarcode()">Lookup</button>
-      </div>
-    </div>
-  </div>
-</div>
-  <div id="scan-loading" style="display:none;" class="card">
-    <div class="loading-box"><div class="spinner"></div><p style="color:#94a3b8;">Analyzing your food...</p></div>
-  </div>
-  <div id="scan-result" style="display:none;">
-    <div class="card">
-      <img id="result-img" class="preview-img" src="" alt="">
-      <div class="result-food" id="result-food-name">—</div>
-      <div style="margin-bottom:12px;"><span class="confidence-tag" id="result-confidence">—</span></div>
-      <div class="macro-mini-grid">
-        <div class="macro-mini m-cal"><div class="macro-mini-val" id="r-cal">—</div><div class="macro-mini-lbl">Calories</div></div>
-        <div class="macro-mini m-pro"><div class="macro-mini-val" id="r-pro">—</div><div class="macro-mini-lbl">Protein g</div></div>
-        <div class="macro-mini m-car"><div class="macro-mini-val" id="r-car">—</div><div class="macro-mini-lbl">Carbs g</div></div>
-        <div class="macro-mini m-fat"><div class="macro-mini-val" id="r-fat">—</div><div class="macro-mini-lbl">Fat g</div></div>
-      </div>
-      <div class="portion-row">
-        <label>Portion:</label>
-        <input type="range" id="portionSlider" min="50" max="500" value="100" step="25" oninput="updatePortion(this.value)">
-        <span class="portion-val" id="portionLabel">100g</span>
-      </div>
-      <div class="card-title" style="margin-top:14px;">Meal Type</div>
-      <div class="meal-type-row">
-        <div class="meal-type-btn active" onclick="selectMeal(this,'breakfast')">🌅 Breakfast</div>
-        <div class="meal-type-btn" onclick="selectMeal(this,'lunch')">☀️ Lunch</div>
-        <div class="meal-type-btn" onclick="selectMeal(this,'dinner')">🌙 Dinner</div>
-        <div class="meal-type-btn" onclick="selectMeal(this,'snack')">🍎 Snack</div>
-      </div>
-      <div id="scan-insights" style="margin-top:8px;"></div>
-      <button class="btn" onclick="logMeal()" style="margin-top:8px;">✅ Add to Diary</button>
-      <button class="btn btn-secondary" onclick="resetScanner()" style="margin-top:10px;">📸 Scan Another</button>
-    </div>
-    <div class="card">
-      <div class="card-title">Other Possibilities</div>
-      <div id="other-preds"></div>
-    </div>
-  </div>
-</div>
-
-<!-- DIARY -->
-<div class="screen" id="screen-diary">
-  <div class="card">
-    <div class="card-title" id="diary-date-title">Today's Food Diary</div>
-    <div id="diary-summary" style="display:none;margin-bottom:16px;">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-        <div class="tdee-card tdee-cal"><div class="tdee-value" style="font-size:1.2rem;" id="d-cal">0</div><div class="tdee-label">Cal</div></div>
-        <div class="tdee-card tdee-pro"><div class="tdee-value" style="font-size:1.2rem;" id="d-pro">0</div><div class="tdee-label">Protein</div></div>
-        <div class="tdee-card tdee-car"><div class="tdee-value" style="font-size:1.2rem;" id="d-car">0</div><div class="tdee-label">Carbs</div></div>
-        <div class="tdee-card tdee-fat"><div class="tdee-value" style="font-size:1.2rem;" id="d-fat">0</div><div class="tdee-label">Fat</div></div>
-      </div>
-    </div>
-    <div id="diary-entries">
-      <div class="empty-diary"><div class="empty-icon">🍽️</div><p>No food logged today</p><p style="font-size:0.8rem;margin-top:6px;">Scan your food to start tracking</p></div>
-    </div>
-  </div>
-  <button class="btn" onclick="showScreen('scanner')">📸 Log a Meal</button>
-</div>
-
-<!-- PROFILE -->
-<div class="screen" id="screen-profile">
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-  <div class="card-title" style="margin-bottom:0;">Your Profile</div>
-  <button onclick="resetProfile()" style="background:#7f1d1d;color:#fca5a5;border:none;padding:6px 14px;border-radius:99px;font-size:0.75rem;font-weight:700;cursor:pointer;">🔄 Reset</button>
-</div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Your Name</label><input class="form-input" id="p-name" type="text" placeholder="Sujal"></div>
-      <div class="form-group"><label class="form-label">Age</label><input class="form-input" id="p-age" type="number" placeholder="20"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Weight (kg)</label><input class="form-input" id="p-weight" type="number" placeholder="70"></div>
-      <div class="form-group"><label class="form-label">Height (cm)</label><input class="form-input" id="p-height" type="number" placeholder="175"></div>
-    </div>
-    <div class="form-group"><label class="form-label">Gender</label><select class="form-select" id="p-gender"><option value="male">Male</option><option value="female">Female</option></select></div>
-    <div class="card-title" style="margin-top:8px;">Your Goal</div>
-    <div class="goal-grid">
-      <div class="goal-btn selected" onclick="selectGoal(this,'fat_loss')"><div class="goal-icon">🔥</div><div class="goal-label">Fat Loss</div></div>
-      <div class="goal-btn" onclick="selectGoal(this,'maintain')"><div class="goal-icon">⚖️</div><div class="goal-label">Maintain</div></div>
-      <div class="goal-btn" onclick="selectGoal(this,'muscle_gain')"><div class="goal-icon">💪</div><div class="goal-label">Muscle Gain</div></div>
-    </div>
-    <div class="card-title">Activity Level</div>
-    <div class="activity-grid">
-      <div class="activity-btn" onclick="selectActivity(this,'sedentary')"><div class="act-name">🪑 Sedentary</div><div class="act-desc">Desk job, no exercise</div></div>
-      <div class="activity-btn" onclick="selectActivity(this,'light')"><div class="act-name">🚶 Light</div><div class="act-desc">Exercise 1-3 days/week</div></div>
-      <div class="activity-btn selected" onclick="selectActivity(this,'moderate')"><div class="act-name">🏃 Moderate</div><div class="act-desc">Exercise 3-5 days/week</div></div>
-      <div class="activity-btn" onclick="selectActivity(this,'active')"><div class="act-name">🏋️ Active</div><div class="act-desc">Hard exercise 6-7 days</div></div>
-      <div class="activity-btn" onclick="selectActivity(this,'very_active')"><div class="act-name">⚡ Very Active</div><div class="act-desc">Athlete or physical job</div></div>
-    </div>
-    <button class="btn" onclick="saveProfile()">Calculate My Targets 🎯</button>
-  </div>
-  <div class="card" id="profile-result" style="display:none;">
-    <div class="card-title">Your Personalized Targets</div>
-    <div class="tdee-grid">
-      <div class="tdee-card tdee-cal"><div class="tdee-value" id="pr-cal">—</div><div class="tdee-label">Calories/day</div></div>
-      <div class="tdee-card tdee-pro"><div class="tdee-value" id="pr-pro">—</div><div class="tdee-label">Protein g</div></div>
-      <div class="tdee-card tdee-car"><div class="tdee-value" id="pr-car">—</div><div class="tdee-label">Carbs g</div></div>
-      <div class="tdee-card tdee-fat"><div class="tdee-value" id="pr-fat">—</div><div class="tdee-label">Fat g</div></div>
-    </div>
-    <div style="margin-top:14px;" id="pr-insights"></div>
-    <button class="btn" onclick="showScreen('dashboard')" style="margin-top:14px;">Go to Dashboard 🏠</button>
-  </div>
-</div>
-
-<!-- AI HEALTH COACH SCREEN -->
-<div class="screen" id="screen-coach">
-  <!-- Coach Top Bar Card -->
-  <div class="card" style="padding:16px 20px;margin-bottom:12px;">
-    <div class="coach-header">
-      <div class="coach-badge">
-        <div class="coach-avatar">🤖</div>
-        <div class="coach-title-box">
-          <h3>NutriCoach AI</h3>
-          <div class="coach-status-text">
-            <span class="coach-status-dot"></span>
-            <span>Gemini AI · Indian Nutrition Expert</span>
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--color-protein);" id="hist-pro-total">0g</div>
+            <div style="font-size:0.68rem;color:var(--text-tertiary);text-transform:uppercase;">Protein</div>
+          </div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--color-carbs);" id="hist-car-total">0g</div>
+            <div style="font-size:0.68rem;color:var(--text-tertiary);text-transform:uppercase;">Carbs</div>
+          </div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--color-fat);" id="hist-fat-total">0g</div>
+            <div style="font-size:0.68rem;color:var(--text-tertiary);text-transform:uppercase;">Fat</div>
           </div>
         </div>
       </div>
-      <div class="coach-actions">
-        <button class="coach-btn-icon" onclick="openGeminiKeyModal()" title="Gemini API Key Settings">
-          <span>⚙️</span> <span id="api-key-btn-text">API Key</span>
-        </button>
-        <button class="coach-btn-icon" onclick="clearCoachChat()" title="Reset Conversation">
-          <span>🗑️</span>
-        </button>
+
+      <!-- MEAL GROUPS -->
+      <div id="history-timeline-container"></div>
+
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button type="button" class="btn btn-primary" onclick="showScreen('scanner')">📸 Scan More Food</button>
+        <button type="button" class="btn btn-secondary" onclick="copyHistorySummary()">📋 Copy Summary</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Live Macro Context Banner -->
-  <div class="coach-context-bar" id="coach-context-bar">
-    <div class="coach-ctx-item">
-      <span class="coach-ctx-lbl">Goal</span>
-      <span class="coach-ctx-val" id="cctx-goal">Fat Loss 🔥</span>
-    </div>
-    <div class="coach-ctx-item">
-      <span class="coach-ctx-lbl">Cal Left</span>
-      <span class="coach-ctx-val accent-cal" id="cctx-cal">—</span>
-    </div>
-    <div class="coach-ctx-item">
-      <span class="coach-ctx-lbl">Protein Left</span>
-      <span class="coach-ctx-val accent-pro" id="cctx-pro">—</span>
-    </div>
-    <div class="coach-ctx-item">
-      <span class="coach-ctx-lbl">Logged Today</span>
-      <span class="coach-ctx-val" id="cctx-meals">0 meals</span>
-    </div>
-  </div>
-
-  <!-- Chat Window -->
-  <div class="chat-window">
-    <div class="chat-messages" id="coach-chat-messages">
-      <!-- Conversation messages -->
-    </div>
-
-    <!-- Quick Prompt Chips -->
-    <div class="prompt-chips-wrapper" id="prompt-chips-wrapper">
-      <button class="prompt-chip" onclick="sendQuickPrompt('🍽️ Suggest a healthy high-protein Indian dinner for my remaining calories')">
-        🍽️ High-Protein Dinner
-      </button>
-      <button class="prompt-chip" onclick="sendQuickPrompt('🔥 How can I hit my protein target today with Indian vegetarian foods?')">
-        🔥 Hit Protein Target
-      </button>
-      <button class="prompt-chip" onclick="sendQuickPrompt('🥗 Suggest 3 healthy Indian evening snacks under 150 calories')">
-        🥗 Low-Cal Snacks
-      </button>
-      <button class="prompt-chip" onclick="sendQuickPrompt('📊 Analyze my food intake today and give me tips')">
-        📊 Review Today's Food
-      </button>
-      <button class="prompt-chip" onclick="sendQuickPrompt('💪 Best pre-workout and post-workout Indian meal ideas')">
-        💪 Workout Nutrition
-      </button>
-      <button class="prompt-chip" onclick="sendQuickPrompt('🍬 What is a healthy Indian sweet swap for sugar cravings?')">
-        🍬 Sweet Craving Swaps
-      </button>
-    </div>
-
-    <!-- Chat Input Bar -->
-    <div class="chat-input-bar">
-      <input type="text" class="chat-input" id="coach-user-input" placeholder="Ask NutriCoach anything about food, macros, recipes..." onkeydown="handleCoachInputKey(event)" autocomplete="off">
-      <button class="chat-send-btn" id="coach-send-btn" onclick="sendCoachMessage()" title="Send message">
-        ➤
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- GEMINI API KEY MODAL -->
-<div class="custom-modal" id="gemini-key-modal">
-  <div class="modal-box">
-    <button class="modal-close-btn" onclick="closeGeminiKeyModal()">✕</button>
-    <div class="api-badge">GOOGLE GEMINI 100% FREE API</div>
-    <h3 style="font-size:1.15rem;font-weight:800;color:#f8fafc;margin-bottom:8px;">
-      🤖 Configure Gemini AI
-    </h3>
-    <p style="font-size:0.82rem;color:#94a3b8;line-height:1.45;margin-bottom:14px;">
-      Get a free Gemini API key in 30 seconds from Google AI Studio to power your personal health coach.
-    </p>
-
-    <div style="background:#0a0f1e;border:1px solid #1e293b;border-radius:12px;padding:12px;margin-bottom:14px;font-size:0.8rem;">
-      <div style="color:#fbbf24;font-weight:700;margin-bottom:4px;">✨ How to get your free key:</div>
-      <ol style="margin-left:18px;color:#cbd5e1;line-height:1.5;">
-        <li>Visit <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#f97316;text-decoration:underline;">Google AI Studio</a></li>
-        <li>Sign in with Google & click <strong>"Create API key"</strong></li>
-        <li>Copy and paste the key below</li>
-      </ol>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label" style="display:flex;justify-content:space-between;">
-        <span>Gemini API Key</span>
-        <span id="key-status-indicator" style="color:#64748b;font-size:0.75rem;">Not saved</span>
-      </label>
-      <div style="position:relative;">
-        <input type="password" class="form-input" id="gemini-key-input" placeholder="AIzaSy..." style="padding-right:40px;">
-        <button type="button" onclick="toggleKeyVisibility()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#64748b;cursor:pointer;font-size:0.9rem;">👁️</button>
-      </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
-      <button class="btn btn-secondary" onclick="testGeminiKey()" id="btn-test-key" style="border-radius:12px;padding:11px;">
-        ⚡ Test Key
-      </button>
-      <button class="btn" onclick="saveGeminiKey()" style="border-radius:12px;padding:11px;">
-        💾 Save Key
-      </button>
-    </div>
-  </div>
-</div>
-
-<script>
-let currentFile=null,currentNutrition={},currentFoodName='',currentMealType='breakfast',selectedGoal='fat_loss',selectedActivity='moderate',userProfile=null;
-const USER_ID='nv_user';
-let geminiApiKey = localStorage.getItem('nv_gemini_key') || '';
-let coachChatHistory = [];
-let isCoachReplying = false;
-let currentDiaryTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-let currentDiaryEntriesCount = 0;
-
-window.onload=function(){
-  const s=localStorage.getItem('nv_profile');
-  if(s){userProfile=JSON.parse(s);showProfileState();}
-  updateDiaryDate();
-  loadDiary();
-  checkGeminiKeyStatus();
-  loadDashCoachInsight();
-};
-
-function updateDiaryDate(){
-  const now=new Date();
-  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const str=days[now.getDay()]+', '+now.getDate()+' '+months[now.getMonth()];
-  const el=document.getElementById('dash-date');
-  if(el) el.textContent=str;
-  const dt=document.getElementById('diary-date-title');
-  if(dt) dt.textContent=str+' · Food Diary';
-  const h=now.getHours();
-  const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
-  const name=userProfile?', '+userProfile.name+'!':'!';
-  const ge=document.getElementById('dash-greeting');
-  if(ge) ge.textContent=g+name;
-}
-
-function showScreen(name){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-  const targetScreen = document.getElementById('screen-'+name);
-  if(targetScreen) targetScreen.classList.add('active');
-  ['dashboard','scanner','diary','coach','profile'].forEach((t,i)=>{
-    if(t===name && document.querySelectorAll('.nav-tab')[i]) {
-      document.querySelectorAll('.nav-tab')[i].classList.add('active');
-    }
-  });
-  if(name==='diary') loadDiary();
-  if(name==='dashboard') { loadDashboard(); loadDashCoachInsight(); }
-  if(name==='coach') loadCoachScreen();
-}
-
-function selectGoal(el,val){
-  document.querySelectorAll('.goal-btn').forEach(b=>b.classList.remove('selected'));
-  el.classList.add('selected'); selectedGoal=val;
-}
-
-function selectActivity(el,val){
-  document.querySelectorAll('.activity-btn').forEach(b=>b.classList.remove('selected'));
-  el.classList.add('selected'); selectedActivity=val;
-}
-
-function calcTDEE(w,h,age,gender,activity){
-  let bmr=gender==='male'?10*w+6.25*h-5*age+5:10*w+6.25*h-5*age-161;
-  const m={sedentary:1.2,light:1.375,moderate:1.55,active:1.725,very_active:1.9};
-  return Math.round(bmr*(m[activity]||1.55));
-}
-
-function calcTargets(tdee,goal,weight){
-  let cal=goal==='fat_loss'?tdee-500:goal==='muscle_gain'?tdee+300:tdee;
-  const pro=Math.round((goal==='fat_loss'?2.2:goal==='muscle_gain'?2.0:1.8)*weight);
-  const fat=Math.round(cal*0.25/9);
-  const carb=Math.round((cal-pro*4-fat*9)/4);
-  return{calories:Math.round(cal),protein_g:pro,fat_g:fat,carbs_g:Math.max(0,carb)};
-}
-
-async function saveProfile(){
-  const name=document.getElementById('p-name').value.trim();
-  const age=parseInt(document.getElementById('p-age').value);
-  const weight=parseFloat(document.getElementById('p-weight').value);
-  const height=parseFloat(document.getElementById('p-height').value);
-  const gender=document.getElementById('p-gender').value;
-  if(!name||!age||!weight||!height){showToast('Please fill all fields!',true);return;}
-  const tdee=calcTDEE(weight,height,age,gender,selectedActivity);
-  const targets=calcTargets(tdee,selectedGoal,weight);
-  userProfile={name,age,weight,height,gender,goal:selectedGoal,activity:selectedActivity,tdee,targets};
-  localStorage.setItem('nv_profile',JSON.stringify(userProfile));
-  try{
-    await fetch('/api/save_profile',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({user_id:USER_ID,name,age,weight,height,gender,goal:selectedGoal,activity:selectedActivity})});
-  }catch(e){}
-  showProfileResult(targets);
-  showProfileState();
-}
-
-function showProfileResult(t){
-  document.getElementById('pr-cal').textContent=t.calories;
-  document.getElementById('pr-pro').textContent=t.protein_g;
-  document.getElementById('pr-car').textContent=t.carbs_g;
-  document.getElementById('pr-fat').textContent=t.fat_g;
-  const insightsMap={
-    fat_loss:['🔥 500 calorie deficit — lose ~0.5kg per week','💪 High protein protects muscle while losing fat','⚡ Lower carbs help increase fat burning'],
-    muscle_gain:['💪 300 calorie surplus — optimal for lean muscle gain','🥩 2g protein per kg maximizes muscle growth','⚡ Higher carbs fuel workouts and recovery'],
-    maintain:['⚖️ Eating at maintenance — weight stays stable','💪 Moderate protein keeps muscle intact','🌿 Balanced macros for energy and health']
-  };
-  document.getElementById('pr-insights').innerHTML=
-    (insightsMap[selectedGoal]||[]).map(i=>'<div class="insight-box">'+i+'</div>').join('');
-  document.getElementById('profile-result').style.display='block';
-  showToast('Profile saved! 🎉');
-}
-
-function showProfileState(){
-  if(!userProfile)return;
-  document.getElementById('no-profile-state').style.display='none';
-  document.getElementById('has-profile-state').style.display='block';
-  const t=userProfile.targets;
-  document.getElementById('t-cal').textContent=t.calories;
-  document.getElementById('t-pro').textContent=t.protein_g;
-  document.getElementById('t-car').textContent=t.carbs_g;
-  document.getElementById('t-fat').textContent=t.fat_g;
-  const gl={fat_loss:'Fat Loss 🔥',maintain:'Maintain ⚖️',muscle_gain:'Muscle Gain 💪'};
-  document.getElementById('dash-goal-label').textContent=gl[userProfile.goal]||'';
-  updateDiaryDate();
-  loadDashboard();
-}
-
-async function loadDashboard(){
-  if(!userProfile)return;
-  try{
-    const res=await fetch('/api/get_diary/'+USER_ID);
-    const data=await res.json();
-    updateProgress(data.totals||{calories:0,protein:0,carbs:0,fat:0});
-  }catch(e){updateProgress({calories:0,protein:0,carbs:0,fat:0});}
-}
-
-function updateProgress(totals){
-  if(!userProfile)return;
-  currentDiaryTotals = totals || { calories: 0, protein: 0, carbs: 0, fat: 0 };
-  updateCoachContextBar();
-  const t=userProfile.targets;
-  const cal=Math.round(totals.calories||0);
-  const rem=Math.max(0,t.calories-cal);
-  document.getElementById('cal-eaten').textContent=cal;
-  document.getElementById('cal-target-small').textContent=t.calories;
-  document.getElementById('cal-remaining').textContent=rem;
-  const pct=(v,target)=>Math.min(100,Math.round(v/target*100));
-  document.getElementById('prog-cal').style.width=pct(cal,t.calories)+'%';
-  document.getElementById('prog-pro').style.width=pct(totals.protein||0,t.protein_g)+'%';
-  document.getElementById('prog-car').style.width=pct(totals.carbs||0,t.carbs_g)+'%';
-  document.getElementById('prog-fat').style.width=pct(totals.fat||0,t.fat_g)+'%';
-  document.getElementById('prog-cal-nums').textContent=cal+' / '+t.calories;
-  document.getElementById('prog-pro-nums').textContent=Math.round(totals.protein||0)+' / '+t.protein_g+'g';
-  document.getElementById('prog-car-nums').textContent=Math.round(totals.carbs||0)+' / '+t.carbs_g+'g';
-  document.getElementById('prog-fat-nums').textContent=Math.round(totals.fat||0)+' / '+t.fat_g+'g';
-  const diff=cal-t.calories;
-  const box=document.getElementById('weight-status-box');
-  const title=document.getElementById('weight-status-title');
-  const desc=document.getElementById('weight-status-desc');
-  if(cal===0){
-    box.className='weight-status status-maintain';
-    title.textContent='Log your meals to see progress 🍽️';
-    desc.textContent='Your weight status will appear here';
-  }else if(diff>100){
-    box.className='weight-status status-surplus';
-    title.textContent='📈 Surplus — '+diff+' extra calories today';
-    desc.textContent=userProfile.goal==='muscle_gain'?'Perfect for muscle gain! Keep training hard.':'Consider smaller portions to hit your goal.';
-  }else if(diff<-100){
-    box.className='weight-status status-deficit';
-    title.textContent='📉 Deficit — '+Math.abs(diff)+' calories under target';
-    desc.textContent=userProfile.goal==='fat_loss'?'Great! You are on track for fat loss.':'Eat a bit more to fuel your goals.';
-  }else{
-    box.className='weight-status status-maintain';
-    title.textContent='⚖️ On Track — Perfectly hitting your target!';
-    desc.textContent='Keep it up. Consistency is everything.';
-  }
-}
-
-document.getElementById('fileInput').addEventListener('change',function(e){
-  currentFile=e.target.files[0];
-  if(currentFile) analyzeFood();
-});
-
-async function analyzeFood(){
-  document.getElementById('scan-upload').style.display='none';
-  document.getElementById('scan-loading').style.display='block';
-  document.getElementById('scan-result').style.display='none';
-  const reader=new FileReader();
-  reader.onload=ev=>document.getElementById('result-img').src=ev.target.result;
-  reader.readAsDataURL(currentFile);
-  const fd=new FormData();
-  fd.append('file',currentFile);
-  try{
-    const res=await fetch('/analyze',{method:'POST',body:fd});
-    const data=await res.json();
-    showScanResult(data);
-  }catch(e){showToast('Error. Try again.',true);resetScanner();}
-}
-
-function showScanResult(data){
-  document.getElementById('scan-loading').style.display='none';
-  document.getElementById('scan-result').style.display='block';
-  const top=data.predictions[0];
-  currentFoodName=top.food;
-  currentNutrition=data.nutrition;
-  document.getElementById('result-food-name').textContent=top.food.replace(/_/g,' ');
-  document.getElementById('result-confidence').textContent='Confidence: '+top.confidence;
-  document.getElementById('portionSlider').value=100;
-  document.getElementById('portionLabel').textContent='100g';
-  updatePortion(100);
-  const n=data.nutrition;
-  const ins=[];
-  if(n.protein>7) ins.push('💪 Good protein source!');
-  if((n.calories_per_100g||0)>300) ins.push('⚠️ High calorie — watch portion size.');
-  if((n.calories_per_100g||0)<150) ins.push('✅ Low calorie — great choice!');
-  if(n.health_score>=8) ins.push('🌿 Very healthy food!');
-  if(n.health_score<=3) ins.push('🔶 Treat food — enjoy occasionally.');
-  if(n.notes) ins.push('📋 '+n.notes);
-  if(userProfile){
-    if(userProfile.goal==='fat_loss'&&(n.calories_per_100g||0)<200) ins.push('🔥 Good choice for fat loss!');
-    if(userProfile.goal==='muscle_gain'&&n.protein>10) ins.push('💪 Excellent for muscle building!');
-  }
-  document.getElementById('scan-insights').innerHTML=ins.map(i=>'<div class="insight-box">'+i+'</div>').join('');
-  document.getElementById('other-preds').innerHTML=data.predictions.slice(1).map(p=>
-    '<div class="diary-entry"><span class="entry-food">'+p.food.replace(/_/g,' ')+'</span><span class="entry-cal">'+p.confidence+'</span></div>'
-  ).join('');
-}
-
-function updatePortion(val){
-  document.getElementById('portionLabel').textContent=val+'g';
-  const f=val/100,n=currentNutrition;
-  document.getElementById('r-cal').textContent=Math.round((n.calories_per_100g||0)*f);
-  document.getElementById('r-pro').textContent=Math.round((n.protein||0)*f*10)/10;
-  document.getElementById('r-car').textContent=Math.round((n.carbs||0)*f*10)/10;
-  document.getElementById('r-fat').textContent=Math.round((n.fat||0)*f*10)/10;
-}
-
-function selectMeal(el,type){
-  document.querySelectorAll('.meal-type-btn').forEach(b=>b.classList.remove('active'));
-  el.classList.add('active'); currentMealType=type;
-}
-
-async function logMeal(){
-  const portion=parseInt(document.getElementById('portionSlider').value);
-  const f=portion/100,n=currentNutrition;
-  const entry={user_id:USER_ID,food:currentFoodName,portion,
-    calories:Math.round((n.calories_per_100g||0)*f),
-    protein:Math.round((n.protein||0)*f*10)/10,
-    carbs:Math.round((n.carbs||0)*f*10)/10,
-    fat:Math.round((n.fat||0)*f*10)/10,
-    meal_type:currentMealType};
-  try{
-    const res=await fetch('/api/log_meal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry)});
-    const data=await res.json();
-    if(data.success){updateProgress(data.today_totals);}
-  }catch(e){}
-  showToast('Added to diary! ✅');
-  resetScanner();
-  setTimeout(()=>showScreen('diary'),800);
-}
-
-function resetScanner(){
-  document.getElementById('fileInput').value='';
-  document.getElementById('scan-upload').style.display='block';
-  document.getElementById('scan-loading').style.display='none';
-  document.getElementById('scan-result').style.display='none';
-  currentFile=null;
-}
-
-async function loadDiary(){
-  try{
-    const res=await fetch('/api/get_diary/'+USER_ID);
-    const data=await res.json();
-    renderDiary(data.entries||[],data.totals||{});
-  }catch(e){renderDiary([],{});}
-}
-
-function renderDiary(entries,totals){
-  currentDiaryTotals = totals || { calories: 0, protein: 0, carbs: 0, fat: 0 };
-  currentDiaryEntriesCount = (entries || []).length;
-  updateCoachContextBar();
-  const container=document.getElementById('diary-entries');
-  const summary=document.getElementById('diary-summary');
-  if(entries.length===0){
-    container.innerHTML='<div class="empty-diary"><div class="empty-icon">🍽️</div><p>No food logged today</p><p style="font-size:0.8rem;margin-top:6px;">Scan your food to start tracking</p></div>';
-    summary.style.display='none'; return;
-  }
-  summary.style.display='block';
-  document.getElementById('d-cal').textContent=Math.round(totals.calories||0);
-  document.getElementById('d-pro').textContent=Math.round(totals.protein||0);
-  document.getElementById('d-car').textContent=Math.round(totals.carbs||0);
-  document.getElementById('d-fat').textContent=Math.round(totals.fat||0);
-  const groups={};
-  entries.forEach(e=>{if(!groups[e.meal_type])groups[e.meal_type]=[];groups[e.meal_type].push(e);});
-  const icons={breakfast:'🌅',lunch:'☀️',dinner:'🌙',snack:'🍎'};
-  const order=['breakfast','lunch','dinner','snack'];
-  let html='';
-  order.forEach(meal=>{
-    if(!groups[meal])return;
-    html+='<div class="meal-section-title">'+(icons[meal]||'🍽️')+' '+meal.charAt(0).toUpperCase()+meal.slice(1)+'</div>';
-    groups[meal].forEach(e=>{
-      html+='<div class="diary-entry"><div><div class="entry-food">'+e.food.replace(/_/g,' ')+'</div><div class="entry-meta">'+e.portion+'g · P:'+e.protein+'g C:'+e.carbs+'g F:'+e.fat+'g</div></div><div class="entry-cal">'+e.calories+' cal</div></div>';
-    });
-  });
-  container.innerHTML=html;
-}
-let searchTimer = null;
-
-function debounceSearch(query) {
-  clearTimeout(searchTimer);
-  const container = document.getElementById('search-results');
-  if (query.length < 2) {
-    container.innerHTML = '';
-    return;
-  }
-  container.innerHTML = '<p style="color:#64748b;font-size:0.82rem;padding:8px;">Searching...</p>';
-  searchTimer = setTimeout(() => {
-    searchFood(query);
-  }, 500);
-}
-
-function resetProfile() {
-  if (confirm('This will clear all profile data and diary. Continue?')) {
-    localStorage.clear();
-    userProfile = null;
-    document.getElementById('no-profile-state').style.display = 'block';
-    document.getElementById('has-profile-state').style.display = 'none';
-    document.getElementById('profile-result').style.display = 'none';
-    document.getElementById('p-name').value = '';
-    document.getElementById('p-age').value = '';
-    document.getElementById('p-weight').value = '';
-    document.getElementById('p-height').value = '';
-    showScreen('profile');
-    showToast('Profile reset! Enter new data.');
-  }
-}
-
-function keepAlive() {
-  fetch('/ping').catch(() => {});
-}
-setInterval(keepAlive, 10 * 60 * 1000);
-let barcodeNutrition = {};
-let barcodeRunning = false;
-let barcodeStream = null;
-let barcodeVideoTrack = null;
-let isTorchOn = false;
-let nativeBarcodeDetector = null;
-let barcodeAnimFrame = null;
-
-// Initialize native BarcodeDetector if available
-if ('BarcodeDetector' in window) {
-  try {
-    nativeBarcodeDetector = new BarcodeDetector({
-      formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code']
-    });
-  } catch (e) {
-    nativeBarcodeDetector = null;
-  }
-}
-
-async function openBarcodeScanner() {
-  document.getElementById('barcode-modal').classList.add('open');
-  const viewport = document.getElementById('barcode-viewport');
-  viewport.innerHTML = '<div class="barcode-guide"></div>';
-  barcodeRunning = true;
-  isTorchOn = false;
-  const torchBtn = document.getElementById('btn-torch');
-  if (torchBtn) torchBtn.style.display = 'inline-flex';
-
-  // Strategy 1: Hardware-Accelerated Native BarcodeDetector (Modern Mobile & Desktop)
-  if (nativeBarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-      barcodeStream = stream;
-      const tracks = stream.getVideoTracks();
-      if (tracks.length > 0) barcodeVideoTrack = tracks[0];
-
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      video.setAttribute('playsinline', 'true');
-      video.autoplay = true;
-      video.muted = true;
-      viewport.appendChild(video);
-      await video.play();
-
-      function scanNativeFrame() {
-        if (!barcodeRunning) return;
-        if (video.readyState >= 2) {
-          nativeBarcodeDetector.detect(video)
-            .then(barcodes => {
-              if (barcodes.length > 0 && barcodeRunning) {
-                const code = barcodes[0].rawValue;
-                if (code) {
-                  onBarcodeDetected(code);
-                  return;
-                }
-              }
-              if (barcodeRunning) {
-                barcodeAnimFrame = requestAnimationFrame(scanNativeFrame);
-              }
-            })
-            .catch(() => {
-              if (barcodeRunning) barcodeAnimFrame = requestAnimationFrame(scanNativeFrame);
-            });
-        } else {
-          if (barcodeRunning) barcodeAnimFrame = requestAnimationFrame(scanNativeFrame);
-        }
-      }
-      barcodeAnimFrame = requestAnimationFrame(scanNativeFrame);
-      return;
-    } catch (e) {
-      console.warn('Native camera stream failed, trying Quagga fallback:', e);
-    }
-  }
-
-  // Strategy 2: Quagga Fallback
-  if (typeof Quagga !== 'undefined') {
-    Quagga.init({
-      inputStream: {
-        name: 'Live',
-        type: 'LiveStream',
-        target: viewport,
-        constraints: {
-          facingMode: 'environment',
-          width: { min: 640, ideal: 1280 },
-          height: { min: 480, ideal: 720 }
-        }
-      },
-      decoder: {
-        readers: [
-          'ean_reader',
-          'ean_8_reader',
-          'upc_reader',
-          'upc_e_reader',
-          'code_128_reader',
-          'code_39_reader',
-          'i2of5_reader'
-        ]
-      },
-      locate: true
-    }, function(err) {
-      if (err) {
-        console.error(err);
-        showToast('Camera stream unavailable. Use manual entry or photo upload.', true);
-        return;
-      }
-      Quagga.start();
-    });
-
-    Quagga.onDetected(function(result) {
-      if (!barcodeRunning) return;
-      const code = result && result.codeResult ? result.codeResult.code : null;
-      if (code) {
-        onBarcodeDetected(code);
-      }
-    });
-  }
-}
-
-function onBarcodeDetected(code) {
-  barcodeRunning = false;
-  if (barcodeAnimFrame) cancelAnimationFrame(barcodeAnimFrame);
-  if (navigator.vibrate) {
-    try { navigator.vibrate(120); } catch(e) {}
-  }
-  closeBarcodeScanner();
-  lookupBarcode(code);
-}
-
-function closeBarcodeScanner() {
-  document.getElementById('barcode-modal').classList.remove('open');
-  barcodeRunning = false;
-  if (barcodeAnimFrame) cancelAnimationFrame(barcodeAnimFrame);
-  if (barcodeStream) {
-    try {
-      barcodeStream.getTracks().forEach(t => t.stop());
-    } catch(e) {}
-    barcodeStream = null;
-    barcodeVideoTrack = null;
-  }
-  if (typeof Quagga !== 'undefined') {
-    try { Quagga.stop(); } catch(e) {}
-  }
-  const viewport = document.getElementById('barcode-viewport');
-  if (viewport) viewport.innerHTML = '<div class="barcode-guide"></div>';
-}
-
-async function toggleTorch() {
-  if (!barcodeVideoTrack) {
-    showToast('Flashlight not supported on this camera', true);
-    return;
-  }
-  try {
-    const capabilities = barcodeVideoTrack.getCapabilities ? barcodeVideoTrack.getCapabilities() : {};
-    if (capabilities.torch) {
-      isTorchOn = !isTorchOn;
-      await barcodeVideoTrack.applyConstraints({
-        advanced: [{ torch: isTorchOn }]
-      });
-      showToast(isTorchOn ? '🔦 Flashlight ON' : '🔦 Flashlight OFF');
-    } else {
-      showToast('Flashlight not available on this device', true);
-    }
-  } catch (e) {
-    showToast('Could not toggle flash', true);
-  }
-}
-
-async function handleBarcodeImageUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  showToast('Scanning barcode from image...');
-  const imgUrl = URL.createObjectURL(file);
-  const img = new Image();
-  img.onload = async function() {
-    // 1. Try native BarcodeDetector
-    if (nativeBarcodeDetector) {
-      try {
-        const barcodes = await nativeBarcodeDetector.detect(img);
-        if (barcodes.length > 0 && barcodes[0].rawValue) {
-          closeBarcodeScanner();
-          lookupBarcode(barcodes[0].rawValue);
-          return;
-        }
-      } catch (err) {}
-    }
-
-    // 2. Try Quagga decodeSingle
-    if (typeof Quagga !== 'undefined') {
-      Quagga.decodeSingle({
-        src: imgUrl,
-        numOfWorkers: 0,
-        inputStream: { size: 800 },
-        decoder: {
-          readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_128_reader']
-        }
-      }, function(result) {
-        if (result && result.codeResult && result.codeResult.code) {
-          closeBarcodeScanner();
-          lookupBarcode(result.codeResult.code);
-        } else {
-          showToast('Could not read barcode from image. Try manual number entry.', true);
-        }
-      });
-    } else {
-      showToast('Could not read barcode. Try entering numbers directly.', true);
-    }
-  };
-  img.src = imgUrl;
-}
-
-function lookupManualBarcode() {
-  const input = document.getElementById('manual-barcode-input');
-  if (!input) return;
-  const val = input.value.trim();
-  if (!val || val.length < 4) {
-    showToast('Please enter a valid barcode number', true);
-    return;
-  }
-  closeBarcodeScanner();
-  input.value = '';
-  lookupBarcode(val);
-}
-
-async function lookupBarcode(barcode) {
-  const cleanCode = String(barcode).trim();
-  showToast('🔍 Looking up product (' + cleanCode + ')...');
-  try {
-    const keyParam = geminiApiKey ? ('?api_key=' + encodeURIComponent(geminiApiKey)) : '';
-    const res = await fetch('/api/barcode/' + encodeURIComponent(cleanCode) + keyParam);
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      showToast(data.error || 'Product not found. Try manual search.', true);
-      return;
-    }
-    barcodeNutrition = data;
-    document.getElementById('barcode-food-name').textContent = data.name;
-    document.getElementById('bcSlider').value = 100;
-    document.getElementById('bcLabel').textContent = '100g';
-    updateBcPortion(100);
-    document.getElementById('barcode-result-card').style.display = 'block';
-    document.getElementById('barcode-result-card').scrollIntoView({ behavior: 'smooth' });
-    showToast('Found: ' + data.name + ' (' + (data.source || 'Database') + ')');
-  } catch (e) {
-    showToast('Lookup failed. Check connection.', true);
-  }
-}
-
-function updateBcPortion(val) {
-  document.getElementById('bcLabel').textContent = val + 'g';
-  const f = val / 100;
-  const n = barcodeNutrition;
-  document.getElementById('bc-cal').textContent =
-    Math.round((n.calories_per_100g||0) * f);
-  document.getElementById('bc-pro').textContent =
-    Math.round((n.protein||0) * f * 10) / 10;
-  document.getElementById('bc-car').textContent =
-    Math.round((n.carbs||0) * f * 10) / 10;
-  document.getElementById('bc-fat').textContent =
-    Math.round((n.fat||0) * f * 10) / 10;
-}
-
-async function logBarcodeFood() {
-  const portion = parseInt(document.getElementById('bcSlider').value) || 100;
-  const f = portion / 100;
-  const n = barcodeNutrition;
-  const entry = {
-    user_id: USER_ID,
-    food: n.name,
-    portion: portion,
-    calories: Math.round((n.calories_per_100g||0) * f),
-    protein: Math.round((n.protein||0) * f * 10) / 10,
-    carbs: Math.round((n.carbs||0) * f * 10) / 10,
-    fat: Math.round((n.fat||0) * f * 10) / 10,
-    meal_type: currentMealType
-  };
-  try {
-    const res = await fetch('/api/log_meal', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(entry)
-    });
-    const data = await res.json();
-    if (data.success) updateProgress(data.today_totals);
-  } catch(e) {}
-  showToast('Added to diary! ✅');
-  closeBarcodeResult();
-  setTimeout(() => showScreen('diary'), 800);
-}
-
-function closeBarcodeResult() {
-  document.getElementById('barcode-result-card')
-    .style.display = 'none';
-  barcodeNutrition = {};
-}
-
-function openPackageScanner() {
-  const fileInput = document.getElementById('packageFileInput');
-  if (fileInput) fileInput.click();
-}
-
-async function handlePackageImageUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  showToast('🔍 AI analyzing milk/icecream packet & nutrition label...');
-  const formData = new FormData();
-  formData.append('image', file);
-  if (typeof geminiApiKey !== 'undefined' && geminiApiKey) {
-    formData.append('api_key', geminiApiKey);
-  }
-
-  const loadingEl = document.getElementById('scan-loading');
-  if (loadingEl) {
-    loadingEl.style.display = 'block';
-    loadingEl.scrollIntoView({ behavior: 'smooth' });
-  }
-
-  try {
-    const res = await fetch('/api/scan_package', {
-      method: 'POST',
-      body: formData
-    });
-    const data = await res.json();
-    if (loadingEl) loadingEl.style.display = 'none';
-
-    if (!res.ok || !data.success) {
-      showToast(data.error || 'Could not read package label. Try search.', true);
-      return;
-    }
-
-    barcodeNutrition = data;
-    document.getElementById('barcode-food-name').textContent = data.name;
-    const defaultPortion = data.portion_g || 100;
-    document.getElementById('bcSlider').value = defaultPortion;
-    document.getElementById('bcLabel').textContent = defaultPortion + 'g';
-    updateBcPortion(defaultPortion);
-    document.getElementById('barcode-result-card').style.display = 'block';
-    document.getElementById('barcode-result-card').scrollIntoView({ behavior: 'smooth' });
-    showToast('✨ Recognized: ' + data.name);
-  } catch (err) {
-    if (loadingEl) loadingEl.style.display = 'none';
-    showToast('Package scan failed. Check network connection.', true);
-  }
-}
-function showToast(msg,error){
-  const t=document.getElementById('toast');
-  t.textContent=msg;
-  t.style.background=error?'#7f1d1d':'#166534';
-  t.style.color=error?'#fca5a5':'#86efac';
-  t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2500);
-}
-let manualNutrition = {};
-let manualFoodName = '';
-
-function switchScanTab(el, tab) {
-  document.querySelectorAll('.scan-tab')
-    .forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  if (tab === 'photo') {
-    document.getElementById('scan-upload').style.display = 'block';
-    document.getElementById('search-panel').style.display = 'none';
-    document.getElementById('scan-result').style.display = 'none';
-  } else {
-    document.getElementById('scan-upload').style.display = 'none';
-    document.getElementById('search-panel').style.display = 'block';
-    document.getElementById('scan-result').style.display = 'none';
-    document.getElementById('scan-loading').style.display = 'none';
-  }
-}
-
-async function searchFood(query) {
-  const container = document.getElementById('search-results');
-  if (query.length < 2) { container.innerHTML = ''; return; }
-  try {
-    const res = await fetch('/api/search_food?q=' + encodeURIComponent(query));
-    const data = await res.json();
-    if (data.results.length === 0) {
-      container.innerHTML = '<p style="color:#475569;font-size:0.85rem;padding:8px;">No results found. Try another name.</p>';
-      return;
-    }
-    container.innerHTML = data.results.map(item =>
-      '<div class="search-item" onclick="selectSearchFood(' +
-      JSON.stringify(item).replace(/"/g, '&quot;') + ')">' +
-      '<div class="search-item-name">' + item.name.replace(/_/g,' ') + '</div>' +
-      '<div class="search-item-cal">' + item.calories_per_100g +
-      ' cal · P:' + item.protein + 'g C:' + item.carbs +
-      'g F:' + item.fat + 'g per 100g</div></div>'
-    ).join('');
-  } catch(e) {
-    container.innerHTML = '<p style="color:#475569;font-size:0.85rem;">Search unavailable.</p>';
-  }
-}
-
-function selectSearchFood(item) {
-  manualFoodName = item.name;
-  manualNutrition = item;
-  document.getElementById('manual-food-name').textContent =
-    item.name.replace(/_/g,' ');
-  document.getElementById('manualSlider').value = 100;
-  document.getElementById('manualLabel').textContent = '100g';
-  document.getElementById('customGrams').value = '';
-  updateManualPortion(100);
-  document.getElementById('manual-entry-card').style.display = 'block';
-  document.getElementById('search-results').innerHTML = '';
-  document.getElementById('food-search-input').value = '';
-  document.getElementById('manual-entry-card')
-    .scrollIntoView({behavior:'smooth'});
-}
-
-function updateManualPortion(val) {
-  const v = parseInt(val) || 100;
-  document.getElementById('manualLabel').textContent = v + 'g';
-  document.getElementById('manualSlider').value = Math.min(500, Math.max(50, v));
-  const f = v / 100;
-  const n = manualNutrition;
-  document.getElementById('mr-cal').textContent =
-    Math.round((n.calories_per_100g||0)*f);
-  document.getElementById('mr-pro').textContent =
-    Math.round((n.protein||0)*f*10)/10;
-  document.getElementById('mr-car').textContent =
-    Math.round((n.carbs||0)*f*10)/10;
-  document.getElementById('mr-fat').textContent =
-    Math.round((n.fat||0)*f*10)/10;
-}
-
-async function logManualMeal() {
-  const grams = parseInt(document.getElementById('customGrams').value) ||
-    parseInt(document.getElementById('manualSlider').value);
-  const f = grams / 100;
-  const n = manualNutrition;
-  const entry = {
-    user_id: USER_ID, food: manualFoodName, portion: grams,
-    calories: Math.round((n.calories_per_100g||0)*f),
-    protein: Math.round((n.protein||0)*f*10)/10,
-    carbs: Math.round((n.carbs||0)*f*10)/10,
-    fat: Math.round((n.fat||0)*f*10)/10,
-    meal_type: currentMealType
-  };
-  try {
-    const res = await fetch('/api/log_meal', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(entry)
-    });
-    const data = await res.json();
-    if(data.success) updateProgress(data.today_totals);
-  } catch(e){}
-  showToast('Added to diary! ✅');
-  document.getElementById('manual-entry-card').style.display = 'none';
-  document.getElementById('food-search-input').value = '';
-  setTimeout(()=>showScreen('diary'), 800);
-}
-
-/* ============ HEALTH COACH (GEMINI API) CLIENT LOGIC ============ */
-
-function checkGeminiKeyStatus() {
-  const statusEl = document.getElementById('key-status-indicator');
-  const btnText = document.getElementById('api-key-btn-text');
-  const inputEl = document.getElementById('gemini-key-input');
-  if (inputEl && geminiApiKey) inputEl.value = geminiApiKey;
-
-  if (geminiApiKey) {
-    if (statusEl) {
-      statusEl.textContent = 'Saved in browser ✓';
-      statusEl.style.color = '#4ade80';
-    }
-    if (btnText) btnText.textContent = 'Key Saved ✓';
-  } else {
-    // Check if server has environment key
-    fetch('/api/coach/status')
-      .then(res => res.json())
-      .then(data => {
-        if (data.has_server_key) {
-          if (statusEl) {
-            statusEl.textContent = 'Server Environment Key Active ✓';
-            statusEl.style.color = '#38bdf8';
-          }
-          if (btnText) btnText.textContent = 'Server Key ✓';
-        } else {
-          if (statusEl) {
-            statusEl.textContent = 'Not configured';
-            statusEl.style.color = '#f87171';
-          }
-          if (btnText) btnText.textContent = 'Set API Key';
-        }
-      })
-      .catch(() => {});
-  }
-}
-
-function openGeminiKeyModal() {
-  document.getElementById('gemini-key-modal').classList.add('open');
-  const input = document.getElementById('gemini-key-input');
-  if (input) {
-    input.value = geminiApiKey;
-    input.focus();
-  }
-  checkGeminiKeyStatus();
-}
-
-function closeGeminiKeyModal() {
-  document.getElementById('gemini-key-modal').classList.remove('open');
-}
-
-function toggleKeyVisibility() {
-  const input = document.getElementById('gemini-key-input');
-  if (input) {
-    input.type = input.type === 'password' ? 'text' : 'password';
-  }
-}
-
-function saveGeminiKey() {
-  const val = document.getElementById('gemini-key-input').value.trim();
-  geminiApiKey = val;
-  if (val) {
-    localStorage.setItem('nv_gemini_key', val);
-    showToast('Gemini API key saved! 🎉');
-  } else {
-    localStorage.removeItem('nv_gemini_key');
-    showToast('API key cleared');
-  }
-  checkGeminiKeyStatus();
-  closeGeminiKeyModal();
-  updateCoachContextBar();
-}
-
-async function testGeminiKey() {
-  const keyInput = document.getElementById('gemini-key-input').value.trim();
-  const testBtn = document.getElementById('btn-test-key');
-  const statusEl = document.getElementById('key-status-indicator');
-  
-  testBtn.disabled = true;
-  testBtn.textContent = 'Testing...';
-  if (statusEl) {
-    statusEl.textContent = 'Connecting to Gemini...';
-    statusEl.style.color = '#fbbf24';
-  }
-
-  try {
-    const res = await fetch('/api/coach/test_key', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: keyInput })
-    });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      showToast('Gemini AI connected successfully! 🚀');
-      if (statusEl) {
-        statusEl.textContent = '✓ Verified & Working';
-        statusEl.style.color = '#4ade80';
-      }
-    } else {
-      showToast(data.error || 'Connection failed', true);
-      if (statusEl) {
-        statusEl.textContent = 'Verification failed';
-        statusEl.style.color = '#f87171';
-      }
-    }
-  } catch (e) {
-    showToast('Network error during test', true);
-    if (statusEl) {
-      statusEl.textContent = 'Connection error';
-      statusEl.style.color = '#f87171';
-    }
-  } finally {
-    testBtn.disabled = false;
-    testBtn.textContent = '⚡ Test Key';
-  }
-}
-
-function updateCoachContextBar() {
-  const goalNames = {
-    fat_loss: 'Fat Loss 🔥',
-    muscle_gain: 'Muscle Gain 💪',
-    maintain: 'Maintain ⚖️'
-  };
-  const goalEl = document.getElementById('cctx-goal');
-  const calEl = document.getElementById('cctx-cal');
-  const proEl = document.getElementById('cctx-pro');
-  const mealsEl = document.getElementById('cctx-meals');
-
-  if (!userProfile) {
-    if (goalEl) goalEl.textContent = 'Setup Profile 👤';
-    if (calEl) calEl.textContent = '—';
-    if (proEl) proEl.textContent = '—';
-    if (mealsEl) mealsEl.textContent = '0 logged';
-    return;
-  }
-
-  const targets = userProfile.targets || { calories: 2000, protein_g: 120 };
-  const calEaten = Math.round(currentDiaryTotals.calories || 0);
-  const proEaten = Math.round(currentDiaryTotals.protein || 0);
-
-  const calLeft = Math.max(0, targets.calories - calEaten);
-  const proLeft = Math.max(0, targets.protein_g - proEaten);
-
-  if (goalEl) goalEl.textContent = goalNames[userProfile.goal] || userProfile.goal;
-  if (calEl) calEl.textContent = calLeft + ' kcal';
-  if (proEl) proEl.textContent = proLeft + 'g';
-  if (mealsEl) mealsEl.textContent = currentDiaryEntriesCount + ' logged';
-}
-
-function loadCoachScreen() {
-  updateCoachContextBar();
-  const chatContainer = document.getElementById('coach-chat-messages');
-  if (chatContainer && chatContainer.children.length === 0) {
-    initCoachChat();
-  }
-  setTimeout(() => {
-    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
-    const input = document.getElementById('coach-user-input');
-    if (input) input.focus();
-  }, 100);
-}
-
-function initCoachChat() {
-  const chatContainer = document.getElementById('coach-chat-messages');
-  if (!chatContainer) return;
-  chatContainer.innerHTML = '';
-  coachChatHistory = [];
-
-  const name = userProfile ? userProfile.name : 'there';
-  const goal = userProfile ? (userProfile.goal === 'fat_loss' ? 'Fat Loss' : userProfile.goal === 'muscle_gain' ? 'Muscle Gain' : 'Healthy Maintenance') : 'healthy eating';
-  
-  let welcomeMsg = `👋 **Namaste ${name}!** I am your **NutriCoach AI**, powered by Google Gemini.\n\nI have live access to your daily targets and food diary to help you achieve your **${goal}** goals.\n\nAsk me anything about:\n- 🍛 High-protein Indian meal suggestions\n- ⚖️ Balancing remaining calories and macros today\n- 🥗 Healthy snack alternatives & festival diet tips\n- 🏋️ Workout pre/post meals\n\n*Tap a suggestion below or type your question to start!*`;
-  
-  appendCoachBubble(welcomeMsg, false);
-}
-
-function clearCoachChat() {
-  if (confirm('Reset chat conversation?')) {
-    initCoachChat();
-    showToast('Conversation cleared');
-  }
-}
-
-function parseMarkdown(text) {
-  if (!text) return '';
-  let escaped = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  // Bold **text**
-  escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  // Italic *text*
-  escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  // Inline code `code`
-  escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // Headers ###
-  escaped = escaped.replace(/^### (.*$)/gim, '<h4>$1</h4>');
-  escaped = escaped.replace(/^## (.*$)/gim, '<h4>$1</h4>');
-
-  const lines = escaped.split('\n');
-  let resultHtml = '';
-  let inList = false;
-  let listType = 'ul';
-
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trim();
-    if (!line) {
-      if (inList) {
-        resultHtml += `</${listType}>`;
-        inList = false;
-      }
-      continue;
-    }
-
-    const bulletMatch = line.match(/^[-*•]\s+(.*)/);
-    const numMatch = line.match(/^(\d+)\.\s+(.*)/);
-
-    if (bulletMatch) {
-      if (!inList || listType !== 'ul') {
-        if (inList) resultHtml += `</${listType}>`;
-        resultHtml += '<ul>';
-        inList = true;
-        listType = 'ul';
-      }
-      resultHtml += `<li>${bulletMatch[1]}</li>`;
-    } else if (numMatch) {
-      if (!inList || listType !== 'ol') {
-        if (inList) resultHtml += `</${listType}>`;
-        resultHtml += '<ol>';
-        inList = true;
-        listType = 'ol';
-      }
-      resultHtml += `<li>${numMatch[2]}</li>`;
-    } else {
-      if (inList) {
-        resultHtml += `</${listType}>`;
-        inList = false;
-      }
-      resultHtml += `<p>${line}</p>`;
-    }
-  }
-
-  if (inList) {
-    resultHtml += `</${listType}>`;
-  }
-
-  return resultHtml;
-}
-
-function getTimeString() {
-  const now = new Date();
-  return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function appendUserBubble(text) {
-  const container = document.getElementById('coach-chat-messages');
-  if (!container) return;
-
-  const row = document.createElement('div');
-  row.className = 'chat-bubble-row user';
-  row.innerHTML = `
-    <div class="bubble-avatar user-ava">👤</div>
-    <div>
-      <div class="bubble-content">
-        <p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>
-      </div>
-      <div class="bubble-time">${getTimeString()}</div>
-    </div>
-  `;
-  container.appendChild(row);
-  container.scrollTop = container.scrollHeight;
-}
-
-function appendCoachBubble(markdownText, saveToHistory = true) {
-  const container = document.getElementById('coach-chat-messages');
-  if (!container) return;
-
-  const row = document.createElement('div');
-  row.className = 'chat-bubble-row coach';
-  row.innerHTML = `
-    <div class="bubble-avatar coach-ava">🤖</div>
-    <div>
-      <div class="bubble-content">
-        ${parseMarkdown(markdownText)}
-      </div>
-      <div class="bubble-time">NutriCoach · ${getTimeString()}</div>
-    </div>
-  `;
-  container.appendChild(row);
-  container.scrollTop = container.scrollHeight;
-
-  if (saveToHistory) {
-    coachChatHistory.push({ role: 'assistant', content: markdownText });
-  }
-}
-
-function showTypingIndicator() {
-  const container = document.getElementById('coach-chat-messages');
-  if (!container) return null;
-
-  const row = document.createElement('div');
-  row.className = 'chat-bubble-row coach';
-  row.id = 'coach-typing-bubble';
-  row.innerHTML = `
-    <div class="bubble-avatar coach-ava">🤖</div>
-    <div>
-      <div class="bubble-content" style="padding:10px 14px;">
-        <div class="typing-dots">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
+    </main>
+
+    <!-- ==========================================================================
+         SCREEN 5: NUTRI-COACH AI (GEMINI)
+         ========================================================================== -->
+    <main class="screen-view" id="screen-coach">
+      <div class="surface-card" style="padding:14px 18px;margin-bottom:14px;">
+        <div class="card-header" style="margin:0;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:38px;height:38px;border-radius:var(--radius-sm);background:linear-gradient(135deg,#f97316,#ef4444);display:flex;align-items:center;justify-content:center;font-size:1.25rem;">🤖</div>
+            <div>
+              <div style="font-weight:700;font-size:0.95rem;">NutriCoach AI</div>
+              <div style="font-size:0.75rem;color:var(--text-secondary);" id="key-status-label">Gemini AI Model Ready</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openGeminiModal()" id="key-btn-text">⚙️ API Key</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="clearCoachConversation()">🗑️</button>
+          </div>
         </div>
       </div>
-      <div class="bubble-time">NutriCoach is thinking...</div>
+
+      <div class="coach-interface-card">
+        <!-- Live Nutrition Context Strip -->
+        <div class="coach-context-strip">
+          <div><span style="color:var(--text-tertiary);">PLAN</span><br><b id="c-ctx-goal" style="color:var(--accent-primary);">Fat Loss</b></div>
+          <div><span style="color:var(--text-tertiary);">CAL LEFT</span><br><b id="c-ctx-cal" style="color:var(--text-primary);">—</b></div>
+          <div><span style="color:var(--text-tertiary);">PROTEIN LEFT</span><br><b id="c-ctx-pro" style="color:var(--color-protein);">—</b></div>
+          <div><span style="color:var(--text-tertiary);">MODE</span><br><b style="color:var(--color-success);">Indian Diet</b></div>
+        </div>
+
+        <!-- Chat Stream -->
+        <div class="coach-chat-stream" id="coach-chat-stream"></div>
+
+        <!-- Prompt Suggestions -->
+        <div class="quick-prompt-bar">
+          <button type="button" class="prompt-chip-btn" onclick="sendPromptChip('🍽️ Suggest a high-protein Indian dinner within my remaining calories')">🍽️ High-Protein Dinner</button>
+          <button type="button" class="prompt-chip-btn" onclick="sendPromptChip('🔥 How can I hit my protein goal today with vegetarian Indian food?')">🔥 Hit Protein Goal</button>
+          <button type="button" class="prompt-chip-btn" onclick="sendPromptChip('🥗 Suggest 3 healthy Indian evening snacks under 150 calories')">🥗 Low-Cal Snacks</button>
+          <button type="button" class="prompt-chip-btn" onclick="sendPromptChip('📊 Analyze my meals today and give me feedback')">📊 Review Meals</button>
+        </div>
+
+        <!-- Input Bar -->
+        <div class="chat-input-row">
+          <button type="button" class="btn btn-subtle btn-sm" id="coach-voice-btn" onclick="startVoiceMic()" title="Voice Input" style="font-size:1.1rem;padding:6px 10px;">🎙️</button>
+          <input type="text" class="field-input" id="coach-query-input" placeholder="Ask NutriCoach about food, macros, recipes..." onkeydown="handleCoachInputKey(event)">
+          <button type="button" class="btn btn-primary btn-sm" id="coach-send-btn" onclick="sendCoachChat()" style="padding:10px 16px;">Send</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- ==========================================================================
+         SCREEN 6: PROFILE & GOALS
+         ========================================================================== -->
+    <main class="screen-view" id="screen-profile">
+      <div class="surface-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="section-eyebrow">Personalized Physiology</div>
+            <div class="card-title">Your Profile & Metabolism</div>
+          </div>
+          <button type="button" class="btn btn-danger btn-sm" onclick="resetProfile()">Reset</button>
+        </div>
+
+        <div class="field-grid-2">
+          <div class="form-field">
+            <label class="field-label">Your Name</label>
+            <input type="text" class="field-input" id="p-name" placeholder="Sujal">
+          </div>
+          <div class="form-field">
+            <label class="field-label">Age (years)</label>
+            <input type="number" class="field-input" id="p-age" placeholder="22">
+          </div>
+        </div>
+
+        <div class="field-grid-2">
+          <div class="form-field">
+            <label class="field-label">Current Weight (kg)</label>
+            <input type="number" class="field-input" id="p-weight" placeholder="72">
+          </div>
+          <div class="form-field">
+            <label class="field-label">Height (cm)</label>
+            <input type="number" class="field-input" id="p-height" placeholder="178">
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label class="field-label">Biological Gender</label>
+          <select class="field-select" id="p-gender">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+
+        <!-- GOAL SELECTION -->
+        <div class="section-eyebrow" style="margin-top:18px;">Primary Fitness Goal</div>
+        <div class="presets-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+          <div class="preset-chip-btn goal-option-card active" data-goal="fat_loss" onclick="selectGoal('fat_loss')" style="padding:14px 8px;text-align:center;">
+            <div style="font-size:1.4rem;margin-bottom:4px;">🔥</div>
+            <div style="font-weight:700;font-size:0.85rem;">Fat Loss</div>
+            <div style="font-size:0.7rem;color:var(--text-tertiary);">-500 kcal</div>
+          </div>
+          <div class="preset-chip-btn goal-option-card" data-goal="maintain" onclick="selectGoal('maintain')" style="padding:14px 8px;text-align:center;">
+            <div style="font-size:1.4rem;margin-bottom:4px;">⚖️</div>
+            <div style="font-weight:700;font-size:0.85rem;">Maintenance</div>
+            <div style="font-size:0.7rem;color:var(--text-tertiary);">Balance TDEE</div>
+          </div>
+          <div class="preset-chip-btn goal-option-card" data-goal="muscle_gain" onclick="selectGoal('muscle_gain')" style="padding:14px 8px;text-align:center;">
+            <div style="font-size:1.4rem;margin-bottom:4px;">💪</div>
+            <div style="font-weight:700;font-size:0.85rem;">Muscle Gain</div>
+            <div style="font-size:0.7rem;color:var(--text-tertiary);">+300 kcal</div>
+          </div>
+        </div>
+
+        <!-- ACTIVITY LEVEL -->
+        <div class="section-eyebrow">Physical Activity Level</div>
+        <div class="presets-grid" style="grid-template-columns:1fr 1fr;margin-bottom:24px;">
+          <div class="preset-chip-btn activity-option-card" data-activity="sedentary" onclick="selectActivity('sedentary')" style="text-align:left;padding:10px 12px;">
+            <div style="font-weight:600;">🪑 Sedentary</div>
+            <div style="font-size:0.7rem;color:var(--text-tertiary);">Desk job, minimal exercise</div>
+          </div>
+          <div class="preset-chip-btn activity-option-card" data-activity="light" onclick="selectActivity('light')" style="text-align:left;padding:10px 12px;">
+            <div style="font-weight:600;">🚶 Light Active</div>
+            <div style="font-size:0.7rem;color:var(--text-tertiary);">1-3 days workout/week</div>
+          </div>
+          <div class="preset-chip-btn activity-option-card active" data-activity="moderate" onclick="selectActivity('moderate')" style="text-align:left;padding:10px 12px;">
+            <div style="font-weight:600;">🏃 Moderate</div>
+            <div style="font-size:0.7rem;color:var(--text-tertiary);">3-5 days gym/sports</div>
+          </div>
+          <div class="preset-chip-btn activity-option-card" data-activity="active" onclick="selectActivity('active')" style="text-align:left;padding:10px 12px;">
+            <div style="font-weight:600;">🏋️ Heavy Active</div>
+            <div style="font-size:0.7rem;color:var(--text-tertiary);">6-7 days intense training</div>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary btn-block" onclick="saveProfile()">
+          <span>🎯</span> <span>Calculate & Save Targets</span>
+        </button>
+      </div>
+
+      <!-- PERSONALIZED TARGETS OUTPUT CARD -->
+      <div class="surface-card" id="profile-targets-card" style="display:none;">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="section-eyebrow">Calculated Metabolism</div>
+            <div class="card-title">Daily Nutrition Targets</div>
+          </div>
+        </div>
+
+        <div class="macro-metric-grid">
+          <div class="macro-metric-box">
+            <div class="macro-metric-val cal" id="out-cal-target">—</div>
+            <div class="macro-metric-lbl">Calories / Day</div>
+          </div>
+          <div class="macro-metric-box">
+            <div class="macro-metric-val pro" id="out-pro-target">—</div>
+            <div class="macro-metric-lbl">Protein Target</div>
+          </div>
+          <div class="macro-metric-box">
+            <div class="macro-metric-val car" id="out-car-target">—</div>
+            <div class="macro-metric-lbl">Carbs Target</div>
+          </div>
+          <div class="macro-metric-box">
+            <div class="macro-metric-val fat" id="out-fat-target">—</div>
+            <div class="macro-metric-lbl">Fats Target</div>
+          </div>
+        </div>
+
+        <div style="background:var(--bg-surface-subtle);border-radius:var(--radius-md);padding:14px;font-size:0.85rem;margin-bottom:16px;">
+          <div style="margin-bottom:4px;">📊 <b>Asian-Indian BMI:</b> <span id="out-bmi-val">—</span></div>
+          <div>🔥 <b>Total Daily Energy Expenditure (TDEE):</b> <span id="out-tdee-val">—</span></div>
+        </div>
+
+        <button type="button" class="btn btn-secondary btn-block" onclick="showScreen('home')">
+          <span>🏠</span> <span>Return to Dashboard</span>
+        </button>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- MOBILE BOTTOM NAVIGATION BAR -->
+  <nav class="mobile-bottom-bar">
+    <button type="button" class="mobile-nav-item active" data-screen="home" onclick="showScreen('home')">
+      <span class="mobile-icon">🏠</span>
+      <span class="mobile-label">Home</span>
+    </button>
+    <button type="button" class="mobile-nav-item" data-screen="scanner" onclick="showScreen('scanner')">
+      <span class="mobile-icon">📸</span>
+      <span class="mobile-label">Scan</span>
+    </button>
+    <button type="button" class="mobile-nav-item" data-screen="nutrition" onclick="showScreen('nutrition')">
+      <span class="mobile-icon">🔍</span>
+      <span class="mobile-label">Search</span>
+    </button>
+    <button type="button" class="mobile-nav-item" data-screen="history" onclick="showScreen('history')">
+      <span class="mobile-icon">📔</span>
+      <span class="mobile-label">History</span>
+    </button>
+    <button type="button" class="mobile-nav-item" data-screen="coach" onclick="showScreen('coach')">
+      <span class="mobile-icon">🤖</span>
+      <span class="mobile-label">Coach</span>
+    </button>
+    <button type="button" class="mobile-nav-item" data-screen="profile" onclick="showScreen('profile')">
+      <span class="mobile-icon">👤</span>
+      <span class="mobile-label">Profile</span>
+    </button>
+  </nav>
+
+  <!-- ==========================================================================
+       MODALS
+       ========================================================================== -->
+
+  <!-- BARCODE & FMCG MODAL -->
+  <div class="modal-backdrop" id="barcode-scan-modal">
+    <div class="modal-dialog" style="text-align:center;">
+      <button type="button" class="modal-close-icon" onclick="closeBarcodeModal()">✕</button>
+      <h3 style="font-size:1.15rem;margin-bottom:4px;">Scan Packaged Item</h3>
+      <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:14px;">Instant lookup for Amul, Mother Dairy, Nandini, Vadilal, Epigamia & FMCG brands.</p>
+
+      <div id="barcode-camera-viewport" style="width:100%;height:220px;position:relative;border-radius:var(--radius-md);overflow:hidden;background:#000;border:1px solid var(--border-subtle);margin-bottom:12px;"></div>
+
+      <div style="display:flex;justify-content:center;gap:8px;margin-bottom:14px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTorchlight()">🔦 Flashlight</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('barcode-photo-input').click()">🖼️ Upload Photo</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('package-ocr-input').click()">🏷️ Package OCR</button>
+      </div>
+
+      <input type="file" id="barcode-photo-input" accept="image/*" style="display:none;" onchange="handlePackageImageUpload(event)">
+      <input type="file" id="package-ocr-input" accept="image/*" style="display:none;" onchange="handlePackageImageUpload(event)">
+
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <input type="text" class="field-input" id="manual-barcode-digits" placeholder="Enter barcode number..." style="font-family:var(--font-mono);font-size:0.85rem;" onkeydown="if(event.key==='Enter') lookupManualBarcodeString()">
+        <button type="button" class="btn btn-primary btn-sm" onclick="lookupManualBarcodeString()">Lookup</button>
+      </div>
     </div>
-  `;
-  container.appendChild(row);
-  container.scrollTop = container.scrollHeight;
-  return row;
-}
+  </div>
 
-function removeTypingIndicator() {
-  const el = document.getElementById('coach-typing-bubble');
-  if (el) el.remove();
-}
+  <!-- BARCODE RESULT CARD POPUP -->
+  <div class="modal-backdrop" id="barcode-result-modal">
+    <div class="modal-dialog">
+      <button type="button" class="modal-close-icon" onclick="document.getElementById('barcode-result-modal').classList.remove('open')">✕</button>
+      <div class="section-eyebrow" id="bc-brand-badge">PACKAGED PRODUCT</div>
+      <h3 id="bc-item-name" style="font-size:1.25rem;margin-bottom:14px;">—</h3>
 
-function handleCoachInputKey(event) {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    sendCoachMessage();
-  }
-}
+      <div class="macro-metric-grid">
+        <div class="macro-metric-box"><div class="macro-metric-val cal" id="bc-val-cal">0</div><div class="macro-metric-lbl">Cal</div></div>
+        <div class="macro-metric-box"><div class="macro-metric-val pro" id="bc-val-pro">0g</div><div class="macro-metric-lbl">Pro</div></div>
+        <div class="macro-metric-box"><div class="macro-metric-val car" id="bc-val-car">0g</div><div class="macro-metric-lbl">Carb</div></div>
+        <div class="macro-metric-box"><div class="macro-metric-val fat" id="bc-val-fat">0g</div><div class="macro-metric-lbl">Fat</div></div>
+      </div>
 
-function sendQuickPrompt(promptText) {
-  sendCoachMessage(promptText);
-}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span class="field-label" style="margin:0;">Portion (g / ml)</span>
+        <span id="bc-serving-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
+      </div>
+      <input type="range" id="bc-serving-slider" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);margin-bottom:16px;" oninput="updateBarcodeServing(this.value)">
 
-async function sendCoachMessage(customText) {
-  if (isCoachReplying) return;
+      <button type="button" class="btn btn-primary btn-block" onclick="logBarcodeItemToDiary(); document.getElementById('barcode-result-modal').classList.remove('open');">
+        <span>✅</span> <span>Add to Daily History</span>
+      </button>
+    </div>
+  </div>
 
-  const inputEl = document.getElementById('coach-user-input');
-  const text = (customText || (inputEl ? inputEl.value : '')).trim();
+  <!-- GEMINI CONFIG MODAL -->
+  <div class="modal-backdrop" id="gemini-key-modal">
+    <div class="modal-dialog">
+      <button type="button" class="modal-close-icon" onclick="closeGeminiModal()">✕</button>
+      <div class="hero-pill" style="margin-bottom:8px;">Google Gemini Free API</div>
+      <h3 style="font-size:1.15rem;margin-bottom:6px;">Configure NutriCoach AI</h3>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:16px;">Provide your free Gemini API key to unlock personalized Indian diet intelligence.</p>
 
-  if (!text) return;
+      <div class="form-field">
+        <label class="field-label">Gemini API Key</label>
+        <input type="password" class="field-input" id="gemini-key-input" placeholder="AIzaSy...">
+      </div>
 
-  if (!customText && inputEl) {
-    inputEl.value = '';
-  }
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
+        <button type="button" class="btn btn-secondary" id="btn-test-gemini-key" onclick="testGeminiAPIKey()">Test Key</button>
+        <button type="button" class="btn btn-primary" onclick="saveGeminiAPIKey()">Save Key</button>
+      </div>
+    </div>
+  </div>
 
-  appendUserBubble(text);
-  coachChatHistory.push({ role: 'user', content: text });
-
-  isCoachReplying = true;
-  const sendBtn = document.getElementById('coach-send-btn');
-  if (sendBtn) sendBtn.disabled = true;
-
-  showTypingIndicator();
-
-  try {
-    const res = await fetch('/api/coach/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: text,
-        history: coachChatHistory.slice(0, -1),
-        user_id: USER_ID,
-        api_key: geminiApiKey
-      })
-    });
-
-    removeTypingIndicator();
-    const data = await res.json();
-
-    if (res.ok && data.success) {
-      appendCoachBubble(data.reply, true);
-    } else {
-      const errMsg = data.error || 'Unable to get response from Gemini AI.';
-      let helpBubble = `⚠️ **Oops!** ${errMsg}`;
-      if (!geminiApiKey) {
-        helpBubble += `\n\n💡 *Tip: You can add your free Google Gemini API key by clicking **[⚙️ API Key]** at the top right of this screen.*`;
-      }
-      appendCoachBubble(helpBubble, false);
-    }
-  } catch (err) {
-    removeTypingIndicator();
-    appendCoachBubble('⚠️ **Connection error**: Could not connect to NutriCoach server. Please check your network and try again.', false);
-  } finally {
-    isCoachReplying = false;
-    if (sendBtn) sendBtn.disabled = false;
-    if (inputEl) inputEl.focus();
-  }
-}
-
-async function loadDashCoachInsight() {
-  const tipEl = document.getElementById('dash-coach-tip');
-  if (!tipEl) return;
-  if (!userProfile) return;
-
-  try {
-    const res = await fetch('/api/coach/quick_insight', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: USER_ID, api_key: geminiApiKey })
-    });
-    const data = await res.json();
-    if (data.success && data.insight) {
-      tipEl.innerHTML = parseMarkdown(data.insight);
-    }
-  } catch (e) {}
-}
-</script>
+  <!-- APPLICATION JAVASCRIPT -->
+  <script src="/static/js/app.js"></script>
 </body>
 </html>

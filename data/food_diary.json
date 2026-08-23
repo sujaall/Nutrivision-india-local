@@ -31,6 +31,28 @@
         "meal_type": "breakfast",
         "time": "13:32"
       }
+    ],
+    "2026-08-23": [
+      {
+        "food": "rabri",
+        "portion": 150,
+        "calories": 300,
+        "protein": 7.5,
+        "carbs": 37.5,
+        "fat": 7.5,
+        "meal_type": "breakfast",
+        "time": "13:13"
+      },
+      {
+        "food": "poha",
+        "portion": 280,
+        "calories": 364,
+        "protein": 8.4,
+        "carbs": 78.4,
+        "fat": 2.8,
+        "meal_type": "snack",
+        "time": "13:14"
+      }
     ]
   }
 }

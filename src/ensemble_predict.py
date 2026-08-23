@@ -9,6 +9,7 @@ def load_all_models(models_dir):
     configs = [
         ('model1_efficientnet.pth', 'efficientnet_b2'),
         ('model2_mobilenetv3.pth', 'mobilenetv3'),
+        ('model3_resnet50.pth', 'resnet50'),
     ]
 
     loaded = []
@@ -20,26 +21,40 @@ def load_all_models(models_dir):
             print(f"Not found: {filename} — skipping")
             continue
 
-        ckpt = torch.load(path, map_location="cpu")
-        class_names = ckpt["class_names"]
-        n = len(class_names)
+        try:
+            try:
+                ckpt = torch.load(path, map_location="cpu", weights_only=False)
+            except TypeError:
+                ckpt = torch.load(path, map_location="cpu")
+            
+            if not class_names and "class_names" in ckpt:
+                class_names = ckpt["class_names"]
+            
+            n = len(class_names) if class_names else len(ckpt.get("class_names", []))
 
-        if arch == "efficientnet_b2":
-            m = timm.create_model(
-                "efficientnet_b2",
-                pretrained=False,
-                num_classes=n
-            )
-        elif arch == "mobilenetv3":
-            m = models.mobilenet_v3_large(weights=None)
-            m.classifier[3] = nn.Linear(1280, n)
+            if arch == "efficientnet_b2":
+                m = timm.create_model(
+                    "efficientnet_b2",
+                    pretrained=False,
+                    num_classes=n
+                )
+            elif arch == "mobilenetv3":
+                m = models.mobilenet_v3_large(weights=None)
+                m.classifier[3] = nn.Linear(1280, n)
+            elif arch == "resnet50":
+                m = models.resnet50(weights=None)
+                m.fc = nn.Linear(m.fc.in_features, n)
+            else:
+                continue
 
-        m.load_state_dict(ckpt["model_state"])
-        m.eval()
-        loaded.append(m)
-        print(f"Loaded: {filename}")
+            m.load_state_dict(ckpt["model_state"])
+            m.eval()
+            loaded.append(m)
+            print(f"Loaded: {filename} ({arch})")
+        except Exception as e:
+            print(f"Warning: Failed loading {filename}: {e}")
 
-    print(f"Total models loaded: {len(loaded)}")
+    print(f"Total ensemble models loaded: {len(loaded)}")
     return loaded, class_names
 
 # Test Time Augmentation — 3 transforms per model

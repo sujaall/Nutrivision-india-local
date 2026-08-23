@@ -6,3 +6,5 @@ __pycache__/
 data/Indian Food Images/
 data/indian-food-images-dataset.zip
 .env
+static/uploads/*
+!static/uploads/.gitkeep

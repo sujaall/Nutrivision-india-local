@@ -41,6 +41,7 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
 DIARY_PATH    = os.path.join(BASE_DIR, 'data', 'food_diary.json')
 PROFILE_PATH  = os.path.join(BASE_DIR, 'data', 'user_profiles.json')
 DATA_PATH     = os.path.join(BASE_DIR, 'data', 'indian_nutrition.json')
+WATER_PATH    = os.path.join(BASE_DIR, 'data', 'water_tracker.json')
 MODEL_PATH    = os.path.join(BASE_DIR, 'models', 'nutrivision_model.pth')
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -74,16 +75,23 @@ def extract_nutrient(nutrients, keyword):
             return round(n.get('value', 0), 1)
     return 0
 
-def get_today_totals(diary, user_id):
-    today = str(date.today())
-    entries = diary.get(user_id, {}).get(today, [])
+def get_day_totals(diary, user_id, target_date=None):
+    day_str = target_date or str(date.today())
+    entries = diary.get(user_id, {}).get(day_str, [])
     totals = {'calories': 0, 'protein': 0, 'carbs': 0, 'fat': 0}
     for e in entries:
         totals['calories'] += e.get('calories', 0)
         totals['protein']  += e.get('protein', 0)
         totals['carbs']    += e.get('carbs', 0)
         totals['fat']      += e.get('fat', 0)
+    totals['calories'] = round(totals['calories'])
+    totals['protein']  = round(totals['protein'], 1)
+    totals['carbs']    = round(totals['carbs'], 1)
+    totals['fat']      = round(totals['fat'], 1)
     return totals, entries
+
+def get_today_totals(diary, user_id):
+    return get_day_totals(diary, user_id, str(date.today()))
 
 # ============ ROUTES ============
 
@@ -549,12 +557,13 @@ def analyze():
     predictions = ensemble_predict(
     filepath, models_list, class_names)
     top_food    = predictions[0]['food']
-    nutrition   = nutrition_db.get(top_food, {
+    local_db    = load_json(DATA_PATH) or nutrition_db
+    nutrition   = local_db.get(top_food, local_db.get(top_food.replace('_', ' '), {
         'calories_per_100g': 200,
         'protein': 5, 'carbs': 25, 'fat': 5,
         'health_score': 5,
         'notes': 'Nutrition data coming soon.'
-    })
+    }))
 
     return jsonify({
         'predictions': predictions,
@@ -566,22 +575,45 @@ def analyze():
 @app.route('/api/search_food')
 def search_food():
     query = request.args.get('q', '').strip()
-    if len(query) < 2:
+    category_filter = request.args.get('category', '').strip().lower()
+    
+    if len(query) < 2 and not category_filter:
         return jsonify({'results': []})
-    cached = get_cached_search(query.lower())
-    if cached is not None:
+    
+    cache_key = f"{query.lower()}_{category_filter}"
+    cached = get_cached_search(cache_key)
+    if cached is not None and len(cached) > 0:
         return jsonify({'results': cached})
 
     q_lower = query.lower()
     results = []
     seen    = set()
 
+    # Non-veg keywords
+    non_veg_keywords = ['chicken', 'mutton', 'fish', 'egg', 'prawn', 'meat', 'beef', 'pork', 'keema', 'biryani_chicken']
+
     # 1. LOCAL Indian database — highest priority
-    for food_key, nutrition in nutrition_db.items():
-        if q_lower in food_key.lower().replace('_', ' '):
+    local_db = load_json(DATA_PATH) or nutrition_db
+    for food_key, nutrition in local_db.items():
+        food_name_clean = food_key.lower().replace('_', ' ')
+        food_cat = (nutrition.get('category') or '').lower()
+        
+        matches_query = not q_lower or (q_lower in food_name_clean)
+        
+        matches_cat = True
+        if category_filter and category_filter != 'all':
+            if category_filter == 'high_protein':
+                matches_cat = nutrition.get('protein', 0) >= 8
+            elif category_filter in ['breakfast', 'curry', 'rice', 'dal', 'snacks', 'dairy', 'breads', 'sweets']:
+                matches_cat = (category_filter in food_cat) or (category_filter in food_name_clean)
+            else:
+                matches_cat = (category_filter in food_cat)
+
+        if matches_query and matches_cat:
             key = food_key[:25]
             if key not in seen:
                 seen.add(key)
+                is_non_veg = any(kw in food_name_clean for kw in non_veg_keywords)
                 results.append({
                     'name':             food_key,
                     'display_name':     food_key.replace('_', ' ').title(),
@@ -589,131 +621,212 @@ def search_food():
                     'protein':          nutrition.get('protein', 0),
                     'carbs':            nutrition.get('carbs', 0),
                     'fat':              nutrition.get('fat', 0),
+                    'fiber':            nutrition.get('fiber', 0),
                     'health_score':     nutrition.get('health_score', 5),
+                    'category':         nutrition.get('category', 'Indian Food'),
+                    'is_veg':           not is_non_veg,
                     'notes':            nutrition.get('notes', ''),
                     'source':           'local'
                 })
 
-    # 2. USDA FoodData Central — 500,000+ foods
-    try:
-        usda_resp = req.get(
-            "https://api.nal.usda.gov/fdc/v1/foods/search",
-            params={
-                'api_key':  USDA_API_KEY,
-                'query':    query,
-                'pageSize': 20,
-                'dataType': 'Foundation,SR Legacy,Survey (FNDDS),Branded'
-            },
-            timeout=5
-        )
-        for food in usda_resp.json().get('foods', []):
-            nutrients = food.get('foodNutrients', [])
-            cal  = extract_nutrient(nutrients, 'Energy')
-            pro  = extract_nutrient(nutrients, 'Protein')
-            carb = extract_nutrient(nutrients, 'Carbohydrate')
-            fat  = extract_nutrient(nutrients, 'Total lipid')
+    # 2. USDA FoodData Central — 500,000+ foods (only if specific query given)
+    if q_lower and len(results) < 15:
+        try:
+            usda_resp = req.get(
+                "https://api.nal.usda.gov/fdc/v1/foods/search",
+                params={
+                    'api_key':  USDA_API_KEY,
+                    'query':    query,
+                    'pageSize': 15,
+                    'dataType': 'Foundation,SR Legacy,Survey (FNDDS),Branded'
+                },
+                timeout=4
+            )
+            if usda_resp.status_code == 200:
+                for food in usda_resp.json().get('foods', []):
+                    nutrients = food.get('foodNutrients', [])
+                    cal  = extract_nutrient(nutrients, 'Energy')
+                    pro  = extract_nutrient(nutrients, 'Protein')
+                    carb = extract_nutrient(nutrients, 'Carbohydrate')
+                    fat  = extract_nutrient(nutrients, 'Total lipid')
 
-            if cal == 0:
-                continue
+                    if cal == 0:
+                        continue
 
-            display = food.get('description', '')[:45]
-            key     = display[:25].lower()
-            if key in seen:
-                continue
-            seen.add(key)
+                    display = food.get('description', '')[:45]
+                    key     = display[:25].lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
 
-            results.append({
-                'name':              display.lower().replace(' ', '_'),
-                'display_name':      display,
-                'calories_per_100g': cal,
-                'protein':           pro,
-                'carbs':             carb,
-                'fat':               fat,
-                'health_score':      5,
-                'notes':             'Source: USDA FoodData Central',
-                'source':            'usda'
-            })
-    except Exception as e:
-        print(f"USDA error: {e}")
+                    is_non_veg = any(kw in display.lower() for kw in non_veg_keywords)
+
+                    results.append({
+                        'name':              display.lower().replace(' ', '_'),
+                        'display_name':      display,
+                        'calories_per_100g': cal,
+                        'protein':           pro,
+                        'carbs':             carb,
+                        'fat':               fat,
+                        'health_score':      5,
+                        'is_veg':            not is_non_veg,
+                        'notes':             'Source: USDA FoodData Central',
+                        'source':            'usda'
+                    })
+        except Exception as e:
+            pass
 
     # 3. Open Food Facts — Indian packaged foods
-    try:
-        off_resp = req.get(
-            "https://world.openfoodfacts.org/cgi/search.pl",
-            params={
-                'search_terms': query,
-                'search_simple': 1,
-                'action':       'process',
-                'json':          1,
-                'page_size':     8,
-                'countries_tags': 'india'
-            },
-            timeout=5
-        )
-        for product in off_resp.json().get('products', []):
-            name = product.get('product_name', '').strip()
-            if not name:
-                continue
-            n   = product.get('nutriments', {})
-            cal = n.get('energy-kcal_100g', 0)
-            if not cal:
-                continue
+    if q_lower and len(results) < 18:
+        try:
+            off_resp = req.get(
+                "https://world.openfoodfacts.org/cgi/search.pl",
+                params={
+                    'search_terms': query,
+                    'search_simple': 1,
+                    'action':       'process',
+                    'json':          1,
+                    'page_size':     8,
+                    'countries_tags': 'india'
+                },
+                timeout=4
+            )
+            if off_resp.status_code == 200:
+                for product in off_resp.json().get('products', []):
+                    name = product.get('product_name', '').strip()
+                    if not name:
+                        continue
+                    n   = product.get('nutriments', {})
+                    cal = n.get('energy-kcal_100g', 0)
+                    if not cal:
+                        continue
 
-            key = name[:25].lower()
-            if key in seen:
-                continue
-            seen.add(key)
+                    key = name[:25].lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
 
-            results.append({
-                'name':              name.lower().replace(' ', '_'),
-                'display_name':      name[:45],
-                'calories_per_100g': round(cal),
-                'protein':           round(n.get('proteins_100g', 0), 1),
-                'carbs':             round(n.get('carbohydrates_100g', 0), 1),
-                'fat':               round(n.get('fat_100g', 0), 1),
-                'health_score':      5,
-                'notes':             'Source: Open Food Facts (India)',
-                'source':            'openfoodfacts'
-            })
-    except Exception as e:
-        print(f"OpenFoodFacts error: {e}")
+                    results.append({
+                        'name':              name.lower().replace(' ', '_'),
+                        'display_name':      name[:45],
+                        'calories_per_100g': round(cal),
+                        'protein':           round(n.get('proteins_100g', 0), 1),
+                        'carbs':             round(n.get('carbohydrates_100g', 0), 1),
+                        'fat':               round(n.get('fat_100g', 0), 1),
+                        'health_score':      5,
+                        'is_veg':            True,
+                        'notes':             'Source: Open Food Facts (India)',
+                        'source':            'openfoodfacts'
+                    })
+        except Exception as e:
+            print(f"OpenFoodFacts error: {e}")
 
-    set_cached_search(query.lower(), results[:20])
-    return jsonify({'results': results[:20]})
+    set_cached_search(cache_key, results[:25])
+    return jsonify({'results': results[:25]})
 
-# ---------- DIARY ----------
+# ---------- DIARY & WATER TRACKER ----------
 @app.route('/api/log_meal', methods=['POST'])
 def log_meal():
-    data    = request.json
+    data    = request.json or {}
     user_id = data.get('user_id', 'default_user')
-    today   = str(date.today())
+    target_date = data.get('date') or str(date.today())
 
     diary = load_json(DIARY_PATH)
-    diary.setdefault(user_id, {}).setdefault(today, [])
+    diary.setdefault(user_id, {}).setdefault(target_date, [])
 
-    diary[user_id][today].append({
-        'food':      data['food'],
-        'portion':   data['portion'],
-        'calories':  data['calories'],
-        'protein':   data['protein'],
-        'carbs':     data['carbs'],
-        'fat':       data['fat'],
-        'meal_type': data['meal_type'],
+    diary[user_id][target_date].append({
+        'food':      data.get('food', 'Food Item'),
+        'portion':   data.get('portion', 100),
+        'calories':  round(float(data.get('calories', 0))),
+        'protein':   round(float(data.get('protein', 0)), 1),
+        'carbs':     round(float(data.get('carbs', 0)), 1),
+        'fat':       round(float(data.get('fat', 0)), 1),
+        'meal_type': data.get('meal_type', 'lunch'),
         'time':      datetime.now().strftime('%H:%M')
     })
     save_json(DIARY_PATH, diary)
 
-    totals, _ = get_today_totals(diary, user_id)
-    return jsonify({'success': True, 'today_totals': totals})
+    totals, entries = get_day_totals(diary, user_id, target_date)
+    return jsonify({'success': True, 'today_totals': totals, 'entries': entries, 'date': target_date})
+
+@app.route('/api/delete_meal', methods=['POST'])
+def delete_meal():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    target_date = data.get('date') or str(date.today())
+    meal_index = data.get('meal_index')
+
+    diary = load_json(DIARY_PATH)
+    user_diary = diary.get(user_id, {})
+    entries = user_diary.get(target_date, [])
+
+    if meal_index is not None and 0 <= meal_index < len(entries):
+        deleted = entries.pop(meal_index)
+        user_diary[target_date] = entries
+        diary[user_id] = user_diary
+        save_json(DIARY_PATH, diary)
+        totals, remaining_entries = get_day_totals(diary, user_id, target_date)
+        return jsonify({
+            'success': True,
+            'deleted': deleted,
+            'entries': remaining_entries,
+            'totals': totals,
+            'date': target_date
+        })
+    return jsonify({'success': False, 'error': 'Invalid meal index or date'}), 400
 
 @app.route('/api/get_diary/<user_id>')
 def get_diary(user_id):
-    diary          = load_json(DIARY_PATH)
-    totals, entries = get_today_totals(diary, user_id)
+    target_date = request.args.get('date') or str(date.today())
+    diary = load_json(DIARY_PATH)
+    totals, entries = get_day_totals(diary, user_id, target_date)
     return jsonify({
         'entries': entries,
         'totals':  totals,
-        'date':    str(date.today())
+        'date':    target_date
+    })
+
+@app.route('/api/get_water/<user_id>')
+def get_water(user_id):
+    target_date = request.args.get('date') or str(date.today())
+    water_data = load_json(WATER_PATH)
+    user_water = water_data.get(user_id, {}).get(target_date, 0)
+    return jsonify({
+        'user_id': user_id,
+        'date': target_date,
+        'water_ml': user_water,
+        'target_ml': 3000
+    })
+
+@app.route('/api/log_water', methods=['POST'])
+def log_water():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    target_date = data.get('date') or str(date.today())
+    action = data.get('action', 'add')
+    amount = int(data.get('amount_ml', 250))
+
+    water_data = load_json(WATER_PATH)
+    user_records = water_data.setdefault(user_id, {})
+    current_ml = user_records.get(target_date, 0)
+
+    if action == 'add':
+        new_ml = max(0, current_ml + amount)
+    elif action == 'set':
+        new_ml = max(0, amount)
+    elif action == 'reset':
+        new_ml = 0
+    else:
+        new_ml = max(0, current_ml + amount)
+
+    user_records[target_date] = new_ml
+    save_json(WATER_PATH, water_data)
+
+    return jsonify({
+        'success': True,
+        'date': target_date,
+        'water_ml': new_ml,
+        'target_ml': 3000
     })
 
 # ---------- HEALTH COACH (GOOGLE GEMINI FREE API) ----------
