@@ -1,9 +1,11 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 flask
+gunicorn
 Pillow
 numpy
 werkzeug
-torch==2.5.1
-torchvision==0.20.1
+torch>=2.2.0
+torchvision>=0.17.0
 timm
 requests
 python-dotenv

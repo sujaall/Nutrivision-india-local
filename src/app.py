@@ -1,8 +1,13 @@
+import sys, os
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
+
 from flask import Flask, render_template, request, jsonify
 from ensemble_predict import load_all_models, ensemble_predict
 from tdee import calculate_tdee, calculate_targets
 from werkzeug.utils import secure_filename
-import json, os, re, base64, requests as req
+import json, re, base64, requests as req
 import time
 
 search_cache = {}
@@ -31,12 +36,13 @@ except Exception:
 USDA_API_KEY = os.environ.get("USDA_API_KEY", "GGEnPm3hmMjnPmtnLtMF6st8W05L7X4IkMDohzoQ")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
 
+BASE_DIR = os.path.dirname(SRC_DIR)
+
 app = Flask(__name__,
-    template_folder='../templates',
-    static_folder='../static')
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=os.path.join(BASE_DIR, 'static'))
 app.secret_key = os.environ.get('SECRET_KEY', 'nutrivision2025secretkey')
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
 DIARY_PATH    = os.path.join(BASE_DIR, 'data', 'food_diary.json')
 PROFILE_PATH  = os.path.join(BASE_DIR, 'data', 'user_profiles.json')
