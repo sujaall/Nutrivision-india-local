@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NutriVision India — Application JavaScript Engine
  * Architecture: Clean, Modular, Functional, Robust
  */
@@ -561,16 +561,53 @@ function renderScanPrediction(data) {
   AppState.currentFoodName = top.food;
   AppState.currentNutrition = data.nutrition || {};
 
-  document.getElementById('result-dish-title').textContent = top.food.replace(/_/g, ' ');
-  
-  // Intelligent confidence label
-  const confRaw = parseFloat(top.confidence) || 0;
-  const confBadge = document.getElementById('result-confidence-badge');
-  if (confBadge) {
-    confBadge.textContent = confRaw >= 70 ? `High Confidence: ${top.confidence}` : `Likely Match: ${top.confidence}`;
+  // ── Food name: prefer Gemini display name ──
+  const displayName = data.food_display || top.food.replace(/_/g, ' ');
+  document.getElementById('result-dish-title').textContent = displayName;
+
+  // ── AI Verified badge ──
+  const aiBadge = document.getElementById('ai-verified-badge');
+  if (aiBadge) {
+    aiBadge.style.display = data.ai_verified ? 'inline-flex' : 'none';
   }
 
-  // Render Alternative Predictions
+  // ── Confidence label ──
+  const confBadge = document.getElementById('result-confidence-badge');
+  if (confBadge) {
+    if (data.ai_verified && data.confidence_note) {
+      confBadge.textContent = data.confidence_note;
+    } else {
+      const confRaw = parseFloat(top.confidence) || 0;
+      confBadge.textContent = confRaw >= 70
+        ? `High Confidence: ${top.confidence}`
+        : `Likely Match: ${top.confidence}`;
+    }
+  }
+
+  // ── Visual portion estimate (from Gemini) ──
+  const portionEstRow = document.getElementById('ai-portion-estimate-row');
+  const portionEstVal = document.getElementById('ai-portion-estimate-val');
+  if (portionEstRow && portionEstVal) {
+    if (data.ai_verified && data.portion_estimate_g) {
+      portionEstVal.textContent = `~${data.portion_estimate_g}g`;
+      portionEstRow.style.display = 'block';
+    } else {
+      portionEstRow.style.display = 'none';
+    }
+  }
+
+  // ── AI insight note ──
+  const aiNoteEl = document.getElementById('ai-insight-note');
+  if (aiNoteEl) {
+    if (data.ai_verified && data.ai_notes) {
+      aiNoteEl.textContent = `🧠 ${data.ai_notes}`;
+      aiNoteEl.style.display = 'block';
+    } else {
+      aiNoteEl.style.display = 'none';
+    }
+  }
+
+  // ── Render Alternative Predictions ──
   const altContainer = document.getElementById('alt-predictions-container');
   if (altContainer) {
     altContainer.innerHTML = data.predictions.map((p, i) => `
@@ -581,11 +618,18 @@ function renderScanPrediction(data) {
     `).join('');
   }
 
-  // Set default 100g portion
-  document.getElementById('portion-slider-input').value = 100;
-  updatePortionMetrics(100);
+  // ── Portion slider: pre-set to Gemini visual estimate if available ──
+  const portionGrams = (data.ai_verified && data.portion_estimate_g)
+    ? Math.min(500, Math.max(25, data.portion_estimate_g))
+    : 100;
+  const sliderEl = document.getElementById('portion-slider-input');
+  if (sliderEl) sliderEl.value = portionGrams;
+  updatePortionMetrics(portionGrams);
 
-  // Nutrition Guidance
+  // Clear active state on all preset buttons (slider moved by AI)
+  document.querySelectorAll('.preset-chip-btn').forEach(btn => btn.classList.remove('active'));
+
+  // ── Nutrition Guidance tags ──
   const n = data.nutrition || {};
   const notesContainer = document.getElementById('result-diet-notes');
   if (notesContainer) {
@@ -593,7 +637,9 @@ function renderScanPrediction(data) {
     if (n.protein >= 8) notes.push('💪 Excellent Protein Source');
     if ((n.calories_per_100g || 0) < 150) notes.push('🥗 Low Calorie Density');
     if ((n.calories_per_100g || 0) > 280) notes.push('⚠️ Calorie Dense Dish');
-    if (n.notes) notes.push(`📋 ${n.notes}`);
+    if (data.health_score >= 8) notes.push('🌿 Very Healthy Choice');
+    else if (data.health_score && data.health_score <= 4) notes.push('⚠️ Eat in Moderation');
+    if (!data.ai_verified && n.notes) notes.push(`📋 ${n.notes}`);
 
     notesContainer.innerHTML = notes.map(note => `
       <div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:4px;">${note}</div>

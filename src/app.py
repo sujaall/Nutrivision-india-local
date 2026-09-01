@@ -418,6 +418,94 @@ Output ONLY a JSON object (no markdown, no backticks, no other text):
     barcode_cache[clean_barcode] = (fallback_res, time.time())
     return jsonify(fallback_res)
 
+# ---------- GEMINI VISION: FOOD IDENTIFICATION & ENRICHMENT ----------
+
+def call_gemini_vision_for_food(image_b64, mime_type, ensemble_hints):
+    """
+    Sends the food image + ensemble top-K hints to Gemini Vision.
+    Returns a dict with:
+      food_name, calories_per_100g, protein, carbs, fat,
+      portion_estimate_g, health_score, confidence_note, ai_notes
+    or None if Gemini is unavailable.
+    """
+    if not GEMINI_API_KEY:
+        return None
+
+    hint_text = ", ".join(
+        [f"{h['food'].replace('_', ' ')} ({h['confidence']})" for h in ensemble_hints]
+    ) if ensemble_hints else "unknown"
+
+    prompt = f"""You are an expert Indian and global food nutritionist and portion-estimation AI.
+
+A user has photographed a meal. Our local image classifier suggests it could be one of:
+  {hint_text}
+
+Your tasks:
+1. Look at the image carefully. Confirm the correct dish name (override the hint if you see something different).
+2. Estimate the serving weight in grams based on the visual plate/bowl size (typical Indian katori ~150g, full plate ~300-400g, snack ~50-100g).
+3. Provide accurate per-100g nutritional values for this dish:
+   - calories (kcal), protein (g), carbs (g), fat (g)
+4. Give a health score 1-10 for this dish (10 = very healthy, Indian diet context).
+5. Write one crisp sentence of nutritional insight (e.g. high protein, high glycaemic index, rich in fibre, etc.).
+
+Return ONLY a JSON object, no markdown, no backticks:
+{{
+  "food_name": "dish name in English (use _ for spaces, e.g. dal_makhani)",
+  "food_display": "Human readable dish name (e.g. Dal Makhani)",
+  "calories_per_100g": 120,
+  "protein": 6.5,
+  "carbs": 14.0,
+  "fat": 4.5,
+  "portion_estimate_g": 200,
+  "health_score": 7,
+  "confidence_note": "High confidence — clearly visible bowl of dal",
+  "ai_notes": "Rich in plant protein and complex carbs; moderate calorie density."
+}}"""
+
+    message_payload = {
+        'role': 'user',
+        'parts': [
+            {'text': prompt},
+            {
+                'inline_data': {
+                    'mime_type': mime_type,
+                    'data': image_b64
+                }
+            }
+        ]
+    }
+
+    success, reply = call_gemini_api(
+        messages=[message_payload],
+        system_prompt="You are a precise food nutrition expert. Always return valid JSON only."
+    )
+
+    if not success or not reply:
+        return None
+
+    try:
+        clean = reply.replace("```json", "").replace("```", "").strip()
+        start = clean.find("{")
+        end = clean.rfind("}")
+        if start == -1 or end == -1:
+            return None
+        ai = json.loads(clean[start:end+1])
+        return {
+            'food_name':         str(ai.get('food_name', '')).replace(' ', '_').lower(),
+            'food_display':      str(ai.get('food_display', ai.get('food_name', ''))).replace('_', ' ').title(),
+            'calories_per_100g': round(float(ai.get('calories_per_100g', 0))),
+            'protein':           round(float(ai.get('protein', 0)), 1),
+            'carbs':             round(float(ai.get('carbs', 0)), 1),
+            'fat':               round(float(ai.get('fat', 0)), 1),
+            'portion_estimate_g': int(ai.get('portion_estimate_g', 150)),
+            'health_score':      min(10, max(1, int(ai.get('health_score', 5)))),
+            'confidence_note':   str(ai.get('confidence_note', '')),
+            'ai_notes':          str(ai.get('ai_notes', ''))
+        }
+    except Exception as e:
+        print(f"[Gemini Vision] JSON parse error: {e}")
+        return None
+
 # ---------- AI PACKAGE & NUTRITION LABEL SCANNER ----------
 
 @app.route('/api/scan_package', methods=['POST'])
@@ -576,25 +664,87 @@ def analyze():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
+    # ── Step 1: Local Ensemble (fast, always runs) ──
     _ensure_models_loaded()
     if not models_list:
         return jsonify({'error': 'Models could not be loaded. Please try again.'}), 500
-    predictions = ensemble_predict(
-        filepath, models_list, class_names)
-    top_food    = predictions[0]['food']
-    local_db    = load_json(DATA_PATH) or nutrition_db
-    nutrition   = local_db.get(top_food, local_db.get(top_food.replace('_', ' '), {
-        'calories_per_100g': 200,
-        'protein': 5, 'carbs': 25, 'fat': 5,
-        'health_score': 5,
-        'notes': 'Nutrition data coming soon.'
-    }))
 
-    return jsonify({
-        'predictions': predictions,
-        'nutrition':   nutrition,
-        'food_name':   top_food
-    })
+    predictions = ensemble_predict(filepath, models_list, class_names)
+    top_food = predictions[0]['food']
+
+    # ── Step 2: Gemini Vision (hybrid AI enrichment) ──
+    # Read image for base64 encoding to send to Gemini
+    ai_result = None
+    try:
+        with open(filepath, 'rb') as img_f:
+            raw_bytes = img_f.read()
+        image_b64 = base64.b64encode(raw_bytes).decode('utf-8')
+        fname_lower = filename.lower()
+        if fname_lower.endswith('.png'):
+            mime_type = 'image/png'
+        elif fname_lower.endswith('.webp'):
+            mime_type = 'image/webp'
+        else:
+            mime_type = 'image/jpeg'
+
+        ai_result = call_gemini_vision_for_food(image_b64, mime_type, predictions)
+    except Exception as e:
+        print(f"[Gemini Vision] Error: {e}")
+        ai_result = None
+
+    # ── Step 3: Merge results ──
+    local_db = load_json(DATA_PATH) or nutrition_db
+
+    if ai_result:
+        # Gemini confirmed/overrode the food — use AI nutrition data
+        gemini_food_name = ai_result['food_name'] or top_food
+
+        # Prefer Gemini macros; supplement health_score/notes from local DB if available
+        local_entry = local_db.get(gemini_food_name, local_db.get(top_food, {}))
+        nutrition = {
+            'calories_per_100g': ai_result['calories_per_100g'] or local_entry.get('calories_per_100g', 200),
+            'protein':           ai_result['protein'] or local_entry.get('protein', 5),
+            'carbs':             ai_result['carbs'] or local_entry.get('carbs', 25),
+            'fat':               ai_result['fat'] or local_entry.get('fat', 5),
+            'health_score':      ai_result['health_score'] or local_entry.get('health_score', 5),
+            'notes':             ai_result['ai_notes'] or local_entry.get('notes', ''),
+            'category':          local_entry.get('category', 'Indian Food')
+        }
+
+        # If Gemini identified a different food, surface it as top prediction
+        if gemini_food_name != top_food:
+            ai_pred = {
+                'food':       gemini_food_name,
+                'confidence': ai_result['confidence_note'] or predictions[0]['confidence']
+            }
+            # Insert Gemini pick at front, keep ensemble alternatives
+            predictions = [ai_pred] + [p for p in predictions if p['food'] != gemini_food_name]
+
+        return jsonify({
+            'predictions':        predictions,
+            'nutrition':          nutrition,
+            'food_name':          gemini_food_name,
+            'food_display':       ai_result['food_display'],
+            'portion_estimate_g': ai_result['portion_estimate_g'],
+            'ai_verified':        True,
+            'ai_notes':           ai_result['ai_notes'],
+            'confidence_note':    ai_result['confidence_note'],
+            'health_score':       ai_result['health_score']
+        })
+    else:
+        # Gemini unavailable — pure ensemble fallback (existing behaviour)
+        nutrition = local_db.get(top_food, local_db.get(top_food.replace('_', ' '), {
+            'calories_per_100g': 200,
+            'protein': 5, 'carbs': 25, 'fat': 5,
+            'health_score': 5,
+            'notes': 'Nutrition data coming soon.'
+        }))
+        return jsonify({
+            'predictions': predictions,
+            'nutrition':   nutrition,
+            'food_name':   top_food,
+            'ai_verified': False
+        })
 
 # ---------- FOOD SEARCH (LOCAL + USDA + OPEN FOOD FACTS) ----------
 @app.route('/api/search_food')

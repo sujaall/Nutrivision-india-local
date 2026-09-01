@@ -1006,6 +1006,29 @@ a:hover {
   margin-bottom: 8px;
 }
 
+/* AI Verified Badge — glowing green pill */
+.ai-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  width: fit-content;
+  margin-bottom: 8px;
+  animation: ai-badge-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes ai-badge-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  50%       { box-shadow: 0 0 10px 2px rgba(16, 185, 129, 0.3); }
+}
+
 /* Alternate Predictions Selector */
 .alternate-predictions-box {
   background: var(--bg-surface-subtle);

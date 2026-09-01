@@ -311,8 +311,17 @@
             <div class="result-header">
               <img src="" id="result-image-element" class="result-image-preview" alt="Food plate preview">
               <div class="result-meta-column">
-                <span class="confidence-badge" id="result-confidence-badge">High Confidence: 92%</span>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span class="confidence-badge" id="result-confidence-badge">High Confidence: 92%</span>
+                  <span class="ai-verified-badge" id="ai-verified-badge" style="display:none;">✦ AI Verified</span>
+                </div>
                 <h2 class="result-food-name" id="result-dish-title">—</h2>
+                <!-- AI portion estimate row -->
+                <div id="ai-portion-estimate-row" style="display:none;margin-top:4px;">
+                  <span style="font-size:0.78rem;color:var(--accent-primary);font-weight:600;">⚡ Visual estimate: <span id="ai-portion-estimate-val">~200g</span> serving</span>
+                </div>
+                <!-- AI insight note -->
+                <div id="ai-insight-note" style="display:none;margin-top:6px;font-size:0.78rem;color:var(--text-secondary);font-style:italic;line-height:1.4;"></div>
                 <div id="result-diet-notes"></div>
               </div>
             </div>
