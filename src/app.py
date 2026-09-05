@@ -305,7 +305,7 @@ def lookup_barcode(barcode):
         for url_pattern, source_name in off_endpoints:
             try:
                 url = url_pattern.format(code=code)
-                res = req.get(url, headers={'User-Agent': 'NutriVision-India-App/1.0 (https://nutrivision.in)'}, timeout=3.5)
+                res = req.get(url, headers={'User-Agent': 'NutriVision-India-Local-App/1.0 (https://nutrivision.in)'}, timeout=3.5)
                 if res.status_code == 200:
                     data = res.json()
                     if data.get('status') == 1 and 'product' in data:
