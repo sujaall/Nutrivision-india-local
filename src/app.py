@@ -1,4 +1,5 @@
 import sys, os
+sys.stdout.reconfigure(line_buffering=True)  # force immediate print flush
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
@@ -35,6 +36,7 @@ except Exception:
 # ============ CONFIG ============
 USDA_API_KEY = os.environ.get("USDA_API_KEY", "GGEnPm3hmMjnPmtnLtMF6st8W05L7X4IkMDohzoQ")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+print(f"[INIT] GEMINI_API_KEY loaded: {'YES (' + GEMINI_API_KEY[:8] + '...)' if GEMINI_API_KEY else 'NO - Gemini Vision will be disabled!'}")
 
 BASE_DIR = os.path.dirname(SRC_DIR)
 
@@ -429,6 +431,7 @@ def call_gemini_vision_for_food(image_b64, mime_type, ensemble_hints):
     or None if Gemini is unavailable.
     """
     if not GEMINI_API_KEY:
+        print("[GEMINI VISION] No API key set — skipping.")
         return None
 
     hint_text = ", ".join(
@@ -477,34 +480,128 @@ Return ONLY a JSON object, no markdown, no backticks:
 
     success, reply = call_gemini_api(
         messages=[message_payload],
-        system_prompt="You are a precise food nutrition expert. Always return valid JSON only."
+        system_prompt="You are a precise food nutrition expert. Always return valid JSON only.",
+        max_tokens=2048
     )
 
     if not success or not reply:
+        print(f"[GEMINI VISION] API call failed: {reply}")
         return None
+
+    print(f"[GEMINI VISION] Raw reply (first 300 chars): {reply[:300]}")
 
     try:
         clean = reply.replace("```json", "").replace("```", "").strip()
         start = clean.find("{")
         end = clean.rfind("}")
         if start == -1 or end == -1:
+            print(f"[GEMINI VISION] No JSON braces found in reply: {clean[:200]}")
             return None
         ai = json.loads(clean[start:end+1])
+        food_name = str(ai.get('food_name', '')).replace(' ', '_').lower()
+        if not food_name:
+            print(f"[GEMINI VISION] food_name empty in parsed JSON: {ai}")
+            return None
         return {
-            'food_name':         str(ai.get('food_name', '')).replace(' ', '_').lower(),
-            'food_display':      str(ai.get('food_display', ai.get('food_name', ''))).replace('_', ' ').title(),
-            'calories_per_100g': round(float(ai.get('calories_per_100g', 0))),
-            'protein':           round(float(ai.get('protein', 0)), 1),
-            'carbs':             round(float(ai.get('carbs', 0)), 1),
-            'fat':               round(float(ai.get('fat', 0)), 1),
+            'food_name':          food_name,
+            'food_display':       str(ai.get('food_display', ai.get('food_name', ''))).replace('_', ' ').title(),
+            'calories_per_100g':  round(float(ai.get('calories_per_100g', 0))),
+            'protein':            round(float(ai.get('protein', 0)), 1),
+            'carbs':              round(float(ai.get('carbs', 0)), 1),
+            'fat':                round(float(ai.get('fat', 0)), 1),
             'portion_estimate_g': int(ai.get('portion_estimate_g', 150)),
-            'health_score':      min(10, max(1, int(ai.get('health_score', 5)))),
-            'confidence_note':   str(ai.get('confidence_note', '')),
-            'ai_notes':          str(ai.get('ai_notes', ''))
+            'health_score':       min(10, max(1, int(ai.get('health_score', 5)))),
+            'confidence_note':    str(ai.get('confidence_note', '')),
+            'ai_notes':           str(ai.get('ai_notes', ''))
         }
     except Exception as e:
-        print(f"[Gemini Vision] JSON parse error: {e}")
+        print(f"[GEMINI VISION] JSON parse error: {e} | Reply was: {reply[:300]}")
         return None
+
+def analyze_with_gemini_vision(image_path, nutrition_db):
+    """Fallback Gemini Vision analysis when PyTorch confidence is low.
+    Uses the existing REST-based call_gemini_api function."""
+    try:
+        if not GEMINI_API_KEY:
+            return None
+
+        with open(image_path, 'rb') as f:
+            image_data = f.read()
+
+        food_list = list(nutrition_db.keys())[:100]
+
+        fname_lower = image_path.lower()
+        if fname_lower.endswith('.png'):
+            mime_type = 'image/png'
+        elif fname_lower.endswith('.webp'):
+            mime_type = 'image/webp'
+        else:
+            mime_type = 'image/jpeg'
+
+        prompt = f"""Look at this food image carefully.
+
+Identify the Indian food dish shown.
+
+Known dishes in our database:
+{', '.join(food_list)}
+
+Respond in this exact JSON format only, no explanation:
+{{
+  "food_name": "exact_name_from_list_in_snake_case",
+  "confidence": 88,
+  "display_name": "Human Readable Name",
+  "description": "One sentence about this dish and its nutrition",
+  "is_in_database": true
+}}
+
+If not in the list, use closest match.
+If not Indian food, set food_name to best guess anyway."""
+
+        image_b64 = base64.b64encode(image_data).decode('utf-8')
+
+        message_payload = {
+            'role': 'user',
+            'parts': [
+                {'text': prompt},
+                {
+                    'inline_data': {
+                        'mime_type': mime_type,
+                        'data': image_b64
+                    }
+                }
+            ]
+        }
+
+        success, reply = call_gemini_api(
+            messages=[message_payload],
+            system_prompt="You are a precise food identification expert. Always return valid JSON only."
+        )
+
+        if not success or not reply:
+            return None
+
+        clean = reply.replace('```json', '').replace('```', '').strip()
+        json_start = clean.find('{')
+        json_end = clean.rfind('}')
+        if json_start == -1 or json_end == -1:
+            return None
+
+        result = json.loads(clean[json_start:json_end+1])
+        food_name = str(result.get('food_name', 'unknown')).replace(' ', '_').lower()
+        confidence = result.get('confidence', 70)
+
+        if food_name and food_name != 'unknown':
+            return {
+                'food': food_name,
+                'confidence': f"{confidence}%",
+                'display_name': result.get('display_name',
+                    food_name.replace('_', ' ').title()),
+                'description': result.get('description', ''),
+                'source': 'gemini_vision'
+            }
+    except Exception as e:
+        print(f"Gemini Vision fallback error: {e}")
+    return None
 
 # ---------- AI PACKAGE & NUTRITION LABEL SCANNER ----------
 
@@ -664,87 +761,108 @@ def analyze():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
-    # ── Step 1: Local Ensemble (fast, always runs) ──
+    # ── Step 1: PyTorch ensemble (3 models x 5 TTA = 15 predictions) ──
     _ensure_models_loaded()
     if not models_list:
         return jsonify({'error': 'Models could not be loaded. Please try again.'}), 500
 
-    predictions = ensemble_predict(filepath, models_list, class_names)
-    top_food = predictions[0]['food']
+    pytorch_preds = ensemble_predict(filepath, models_list, class_names)
+    top = pytorch_preds[0]
+    confidence_val = float(top['confidence'].replace('%', ''))
+    print(f"[ANALYZE] PyTorch top prediction: {top['food']} ({confidence_val:.1f}%)")
 
-    # ── Step 2: Gemini Vision (hybrid AI enrichment) ──
-    # Read image for base64 encoding to send to Gemini
-    ai_result = None
-    try:
-        with open(filepath, 'rb') as img_f:
-            raw_bytes = img_f.read()
-        image_b64 = base64.b64encode(raw_bytes).decode('utf-8')
-        fname_lower = filename.lower()
-        if fname_lower.endswith('.png'):
-            mime_type = 'image/png'
-        elif fname_lower.endswith('.webp'):
-            mime_type = 'image/webp'
-        else:
-            mime_type = 'image/jpeg'
+    # ── Step 2: ALWAYS try Gemini Vision first (PyTorch hints passed in) ──
+    ai_source = 'pytorch_ensemble'
+    gemini_desc = ''
+    final_preds = pytorch_preds
+    top_food = top['food']
 
-        ai_result = call_gemini_vision_for_food(image_b64, mime_type, predictions)
-    except Exception as e:
-        print(f"[Gemini Vision] Error: {e}")
-        ai_result = None
+    if GEMINI_API_KEY:
+        print(f"[ANALYZE] Calling Gemini Vision with {len(pytorch_preds)} PyTorch hints...")
+        try:
+            with open(filepath, 'rb') as f:
+                image_data = f.read()
+            image_b64 = base64.b64encode(image_data).decode('utf-8')
+            fname_lower = filepath.lower()
+            if fname_lower.endswith('.png'):
+                mime_type = 'image/png'
+            elif fname_lower.endswith('.webp'):
+                mime_type = 'image/webp'
+            else:
+                mime_type = 'image/jpeg'
 
-    # ── Step 3: Merge results ──
+            gemini_result = call_gemini_vision_for_food(image_b64, mime_type, pytorch_preds)
+            if gemini_result:
+                gname = gemini_result.get('food_name', '').strip()
+                if gname:
+                    ai_source = 'gemini_vision'
+                    top_food  = gname
+                    gemini_desc = gemini_result.get('ai_notes', '') or gemini_result.get('confidence_note', '')
+                    final_preds = [
+                        {
+                            'food':       top_food,
+                            'confidence': f"{gemini_result.get('health_score', 8) * 10}%",
+                            'source':     'gemini_vision',
+                            'display':    gemini_result.get('food_display', top_food.replace('_', ' ').title())
+                        },
+                        *[{'food': p['food'], 'confidence': p['confidence'], 'source': 'pytorch'}
+                          for p in pytorch_preds[:3]]
+                    ]
+                    # If Gemini returned nutrition directly, use it
+                    gemini_cal = gemini_result.get('calories_per_100g', 0)
+                    if gemini_cal:
+                        gemini_nutrition = {
+                            'calories_per_100g': gemini_cal,
+                            'protein':           gemini_result.get('protein', 0),
+                            'carbs':             gemini_result.get('carbs', 0),
+                            'fat':               gemini_result.get('fat', 0),
+                            'portion_estimate_g': gemini_result.get('portion_estimate_g', 150),
+                            'health_score':      gemini_result.get('health_score', 7),
+                            'notes':             gemini_desc
+                        }
+                    else:
+                        gemini_nutrition = None
+                    print(f"[ANALYZE] Gemini identified: {top_food} | Cal: {gemini_cal}")
+                else:
+                    print("[ANALYZE] Gemini returned empty food name, using PyTorch result")
+                    gemini_nutrition = None
+            else:
+                print("[ANALYZE] Gemini Vision returned no result, using PyTorch")
+                gemini_nutrition = None
+        except Exception as e:
+            print(f"[ANALYZE] Gemini Vision exception: {e}")
+            gemini_nutrition = None
+    else:
+        print("[ANALYZE] GEMINI_API_KEY not set - skipping Gemini Vision. Set it in .env!")
+        gemini_nutrition = None
+
+    # ── Step 3: Nutrition lookup ──
     local_db = load_json(DATA_PATH) or nutrition_db
 
-    if ai_result:
-        # Gemini confirmed/overrode the food — use AI nutrition data
-        gemini_food_name = ai_result['food_name'] or top_food
-
-        # Prefer Gemini macros; supplement health_score/notes from local DB if available
-        local_entry = local_db.get(gemini_food_name, local_db.get(top_food, {}))
-        nutrition = {
-            'calories_per_100g': ai_result['calories_per_100g'] or local_entry.get('calories_per_100g', 200),
-            'protein':           ai_result['protein'] or local_entry.get('protein', 5),
-            'carbs':             ai_result['carbs'] or local_entry.get('carbs', 25),
-            'fat':               ai_result['fat'] or local_entry.get('fat', 5),
-            'health_score':      ai_result['health_score'] or local_entry.get('health_score', 5),
-            'notes':             ai_result['ai_notes'] or local_entry.get('notes', ''),
-            'category':          local_entry.get('category', 'Indian Food')
-        }
-
-        # If Gemini identified a different food, surface it as top prediction
-        if gemini_food_name != top_food:
-            ai_pred = {
-                'food':       gemini_food_name,
-                'confidence': ai_result['confidence_note'] or predictions[0]['confidence']
-            }
-            # Insert Gemini pick at front, keep ensemble alternatives
-            predictions = [ai_pred] + [p for p in predictions if p['food'] != gemini_food_name]
-
-        return jsonify({
-            'predictions':        predictions,
-            'nutrition':          nutrition,
-            'food_name':          gemini_food_name,
-            'food_display':       ai_result['food_display'],
-            'portion_estimate_g': ai_result['portion_estimate_g'],
-            'ai_verified':        True,
-            'ai_notes':           ai_result['ai_notes'],
-            'confidence_note':    ai_result['confidence_note'],
-            'health_score':       ai_result['health_score']
-        })
+    # Use Gemini nutrition if available, else look up from DB
+    if ai_source == 'gemini_vision' and gemini_nutrition:
+        nutrition = gemini_nutrition
+        # Merge any extra fields from local DB if available
+        local_match = local_db.get(top_food, local_db.get(top_food.replace('_', ' '), {}))
+        if local_match:
+            nutrition.setdefault('fiber', local_match.get('fiber', 0))
+            nutrition.setdefault('category', local_match.get('category', 'Indian Food'))
     else:
-        # Gemini unavailable — pure ensemble fallback (existing behaviour)
         nutrition = local_db.get(top_food, local_db.get(top_food.replace('_', ' '), {
-            'calories_per_100g': 200,
-            'protein': 5, 'carbs': 25, 'fat': 5,
-            'health_score': 5,
-            'notes': 'Nutrition data coming soon.'
+            'calories_per_100g': 200, 'protein': 5,
+            'carbs': 25, 'fat': 5, 'health_score': 5,
+            'notes': 'Detailed nutrition data coming soon.'
         }))
-        return jsonify({
-            'predictions': predictions,
-            'nutrition':   nutrition,
-            'food_name':   top_food,
-            'ai_verified': False
-        })
+
+    return jsonify({
+        'predictions':        final_preds,
+        'nutrition':          nutrition,
+        'food_name':          top_food,
+        'ai_source':          ai_source,
+        'gemini_description': gemini_desc,
+        'pytorch_confidence': confidence_val,
+        'ai_verified':        ai_source == 'gemini_vision'
+    })
 
 # ---------- FOOD SEARCH (LOCAL + USDA + OPEN FOOD FACTS) ----------
 @app.route('/api/search_food')
@@ -1082,12 +1200,10 @@ def get_gemini_models_for_key(api_key):
             return cached_models
 
     fallback_models = [
-        "gemini-2.0-flash",
+        "gemini-3.6-flash",
+        "gemini-2.5-flash",
         "gemini-1.5-flash",
         "gemini-1.5-flash-latest",
-        "gemini-2.0-flash-lite",
-        "gemini-2.5-flash",
-        "gemini-3.6-flash",
         "gemini-1.5-pro",
         "gemini-pro"
     ]
@@ -1123,7 +1239,7 @@ def get_gemini_models_for_key(api_key):
 
     return fallback_models
 
-def call_gemini_api(messages, system_prompt="", api_key=None):
+def call_gemini_api(messages, system_prompt="", api_key=None, max_tokens=1200):
     """
     Calls Google Gemini API (v1beta REST) with dynamic model discovery, fallback, and multimodal support.
     """
@@ -1159,8 +1275,8 @@ def call_gemini_api(messages, system_prompt="", api_key=None):
         payload = {
             "contents": formatted_contents,
             "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": 1000
+                "temperature": 0.4,
+                "maxOutputTokens": max_tokens
             }
         }
         if system_prompt:

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NutriVision India — Application JavaScript Engine
  * Architecture: Clean, Modular, Functional, Robust
  */
@@ -571,16 +571,46 @@ function renderScanPrediction(data) {
     aiBadge.style.display = data.ai_verified ? 'inline-flex' : 'none';
   }
 
-  // ── Confidence label ──
+  // ── AI Source badge (PyTorch vs Gemini) ──
+  const aiSource = data.ai_source;
+  const badgeEl = document.getElementById('ai-source-badge');
+  if (badgeEl) {
+    if (aiSource === 'gemini_vision') {
+      badgeEl.innerHTML =
+        '<span style="background:#7c3aed;color:white;font-size:0.7rem;padding:3px 12px;border-radius:99px;font-weight:700;">🤖 Gemini Vision</span>';
+    } else {
+      badgeEl.innerHTML =
+        '<span style="background:#1d4ed8;color:white;font-size:0.7rem;padding:3px 12px;border-radius:99px;font-weight:700;">🧠 PyTorch AI (3 Models)</span>';
+    }
+  }
+
+  // ── Gemini description if available ──
+  const geminiDescEl = document.getElementById('gemini-desc');
+  if (geminiDescEl) {
+    if (data.gemini_description) {
+      geminiDescEl.textContent = data.gemini_description;
+      geminiDescEl.style.display = 'block';
+    } else {
+      geminiDescEl.style.display = 'none';
+    }
+  }
+
+  // ── Confidence label (based on PyTorch confidence, not Gemini) ──
   const confBadge = document.getElementById('result-confidence-badge');
   if (confBadge) {
-    if (data.ai_verified && data.confidence_note) {
-      confBadge.textContent = data.confidence_note;
+    const pytorchConf = parseFloat(data.pytorch_confidence) || 0;
+    if (data.ai_source === 'gemini_vision') {
+      confBadge.textContent = pytorchConf >= 75
+        ? `✅ Gemini Verified (Models: ${pytorchConf.toFixed(1)}%)`
+        : `🔍 Gemini Identified (Models: ${pytorchConf.toFixed(1)}% — Low Confidence)`;
+      confBadge.style.background = pytorchConf >= 75 ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)';
+      confBadge.style.color = pytorchConf >= 75 ? '#10b981' : '#f59e0b';
     } else {
-      const confRaw = parseFloat(top.confidence) || 0;
-      confBadge.textContent = confRaw >= 70
-        ? `High Confidence: ${top.confidence}`
-        : `Likely Match: ${top.confidence}`;
+      confBadge.textContent = pytorchConf >= 75
+        ? `High Confidence: ${pytorchConf.toFixed(1)}%`
+        : `Likely Match: ${pytorchConf.toFixed(1)}%`;
+      confBadge.style.background = '';
+      confBadge.style.color = '';
     }
   }
 
@@ -607,15 +637,40 @@ function renderScanPrediction(data) {
     }
   }
 
-  // ── Render Alternative Predictions ──
+  // ── Render Alternative Predictions (Gemini + PyTorch 3 models) ──
   const altContainer = document.getElementById('alt-predictions-container');
   if (altContainer) {
-    altContainer.innerHTML = data.predictions.map((p, i) => `
-      <button type="button" class="alt-pred-chip ${i === 0 ? 'active' : ''}" onclick="switchActivePrediction('${p.food}', this)">
-        <span>${p.food.replace(/_/g, ' ').toUpperCase()}</span>
-        <span style="opacity:0.75;">(${p.confidence})</span>
-      </button>
-    `).join('');
+    const pytorchConf = parseFloat(data.pytorch_confidence) || 0;
+    // Separate Gemini prediction from PyTorch predictions
+    const geminiPreds = data.predictions.filter(p => p.source === 'gemini_vision');
+    const pytorchPreds = data.predictions.filter(p => p.source === 'pytorch' || p.source === 'pytorch_ensemble' || !p.source);
+
+    let html = '';
+
+    // Gemini chip (if present)
+    geminiPreds.forEach((p, i) => {
+      const label = (p.display || p.food.replace(/_/g, ' ')).replace(/\b\w/g, c => c.toUpperCase());
+      html += `
+        <button type="button" class="alt-pred-chip active" onclick="switchActivePrediction('${p.food}', this)" title="Identified by Gemini Vision AI">
+          <span style="font-size:0.65rem;opacity:0.7;display:block;margin-bottom:1px;">🤖 Gemini Vision</span>
+          <span>${label.toUpperCase()}</span>
+        </button>`;
+    });
+
+    // PyTorch model chips — always shown, with low-confidence warning if needed
+    if (pytorchPreds.length > 0) {
+      html += `<div style="width:100%;font-size:0.68rem;color:var(--text-secondary);margin:6px 0 3px;letter-spacing:0.05em;">🧠 3-MODEL ENSEMBLE PREDICTIONS${pytorchConf < 75 ? ' <span style="color:#f59e0b">(Low Confidence)</span>' : ''}</div>`;
+      pytorchPreds.forEach((p, i) => {
+        const label = p.food.replace(/_/g, ' ').toUpperCase();
+        html += `
+          <button type="button" class="alt-pred-chip" onclick="switchActivePrediction('${p.food}', this)" title="Predicted by PyTorch 3-Model Ensemble">
+            <span>${label}</span>
+            <span style="opacity:0.75;">(${p.confidence})</span>
+          </button>`;
+      });
+    }
+
+    altContainer.innerHTML = html;
   }
 
   // ── Portion slider: pre-set to Gemini visual estimate if available ──
