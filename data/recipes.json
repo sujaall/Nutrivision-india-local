@@ -1,0 +1,36 @@
+{
+  "nv_user": {
+    "chicken rice": {
+      "name": "chicken rice",
+      "ingredients": [
+        {
+          "name": "chicken",
+          "grams": 100,
+          "calories_per_100g": 0,
+          "protein": 54,
+          "carbs": 200,
+          "fat": 18
+        },
+        {
+          "name": "",
+          "grams": 100,
+          "calories_per_100g": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        }
+      ],
+      "servings": 4,
+      "cooked_weight_g": 170,
+      "per_serving_g": 42,
+      "total_calories": 0,
+      "nutrition_per_100g": {
+        "calories_per_100g": 0,
+        "protein": 31.8,
+        "carbs": 117.6,
+        "fat": 10.6
+      },
+      "created_at": "2026-09-27T00:24:29.051732"
+    }
+  }
+}

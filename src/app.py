@@ -10,6 +10,8 @@ from tdee import calculate_tdee, calculate_targets
 from werkzeug.utils import secure_filename
 import json, re, base64, requests as req
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import difflib
 
 search_cache = {}
 CACHE_DURATION = 300
@@ -50,7 +52,13 @@ DIARY_PATH    = os.path.join(BASE_DIR, 'data', 'food_diary.json')
 PROFILE_PATH  = os.path.join(BASE_DIR, 'data', 'user_profiles.json')
 DATA_PATH     = os.path.join(BASE_DIR, 'data', 'indian_nutrition.json')
 WATER_PATH    = os.path.join(BASE_DIR, 'data', 'water_tracker.json')
+CORRECTIONS_PATH = os.path.join(BASE_DIR, 'data', 'corrections.json')
 MODEL_PATH    = os.path.join(BASE_DIR, 'models', 'nutrivision_model.pth')
+
+# ── Upload security ──────────────────────────────────────────────────────────
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'}
+MAX_UPLOAD_MB = 12  # reject files > 12 MB
+ALLOWED_MIME_PREFIXES = ('image/',)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -60,14 +68,15 @@ with open(DATA_PATH) as f:
     nutrition_db = json.load(f)
 print(f"Nutrition DB loaded: {len(nutrition_db)} foods")
 
-# ============ LAZY MODEL LOADING ============
-# Models are NOT loaded at startup to avoid OOM on Render free tier (512MB).
-# They are loaded on the first /analyze request.
+# ============ MODEL LOADING ============
+# On Render free tier (512MB) we lazy-load; locally we pre-load eagerly
+# so the first /analyze request is instant.
 import threading
 _model_lock = threading.Lock()
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 models_list = None
 class_names = None
+_IS_LOCAL = os.environ.get('RENDER') is None  # True when running locally
 
 def _ensure_models_loaded():
     global models_list, class_names
@@ -76,9 +85,22 @@ def _ensure_models_loaded():
     with _model_lock:
         if models_list is not None:
             return
-        print("[lazy] Loading ensemble models...")
+        print("[model-load] Loading ensemble models...")
         models_list, class_names = load_all_models(MODELS_DIR)
-        print(f"[lazy] Ready! {len(models_list)} models loaded")
+        print(f"[model-load] Ready! {len(models_list)} models loaded")
+
+if _IS_LOCAL:
+    # Pre-load in background thread so server starts instantly
+    def _background_preload():
+        try:
+            _ensure_models_loaded()
+        except Exception as e:
+            print(f"[preload] Warning: {e}")
+    threading.Thread(target=_background_preload, daemon=True).start()
+
+# Deduplication lock — prevents double-tap from sending 2 concurrent /analyze calls
+_analyze_in_flight: set = set()
+_analyze_flight_lock = threading.Lock()
 
 # ============ HELPERS ============
 def load_json(path):
@@ -98,6 +120,34 @@ def extract_nutrient(nutrients, keyword):
         if keyword.lower() in n.get('nutrientName', '').lower():
             return round(n.get('value', 0), 1)
     return 0
+
+def fuzzy_nutrition_lookup(food_key: str, db: dict, cutoff: float = 0.55):
+    """
+    Return nutrition dict for food_key using exact → underscore-space swap
+    → difflib fuzzy match.  Returns empty dict if nothing found.
+    """
+    # 1. Exact match
+    if food_key in db:
+        return db[food_key]
+    # 2. underscore ↔ space swap
+    alt = food_key.replace('_', ' ') if '_' in food_key else food_key.replace(' ', '_')
+    if alt in db:
+        return db[alt]
+    # 3. Case-insensitive prefix scan
+    food_lower = food_key.lower()
+    for k in db:
+        if k.lower().startswith(food_lower[:8]):
+            return db[k]
+    # 4. difflib best match
+    keys = list(db.keys())
+    matches = difflib.get_close_matches(food_key, keys, n=1, cutoff=cutoff)
+    if matches:
+        return db[matches[0]]
+    # 5. Try after stripping common suffixes (_curry, _rice, _dal …)
+    base = re.sub(r'_(curry|rice|dal|sabzi|masala|fry|roasted|boiled|cooked)$', '', food_key)
+    if base != food_key:
+        return fuzzy_nutrition_lookup(base, db, cutoff=cutoff - 0.05)
+    return {}
 
 def get_day_totals(diary, user_id, target_date=None):
     day_str = target_date or str(date.today())
@@ -234,6 +284,18 @@ def parse_off_nutriments(product, source_label, clean_barcode):
     car = nutriments.get('carbohydrates_100g') or nutriments.get('carbohydrates') or nutriments.get('carbohydrates_value') or 0
     fat = nutriments.get('fat_100g') or nutriments.get('fat') or nutriments.get('fat_value') or 0
 
+    # Try to extract per-serving size (in grams)
+    serving_g = 100
+    srv_raw = product.get('serving_size') or product.get('serving_quantity') or ''
+    if srv_raw:
+        import re as _re
+        m = _re.search(r'(\d+(?:\.\d+)?)', str(srv_raw))
+        if m:
+            try:
+                serving_g = max(5, min(1000, round(float(m.group(1)))))
+            except Exception:
+                serving_g = 100
+
     try:
         cal = float(cal)
         pro = float(pro)
@@ -250,6 +312,7 @@ def parse_off_nutriments(product, source_label, clean_barcode):
             'protein': round(pro, 1),
             'carbs': round(car, 1),
             'fat': round(fat, 1),
+            'serving_size_g': serving_g,
             'source': source_label,
             'brand': brand or 'Verified Brand'
         }
@@ -295,7 +358,7 @@ def lookup_barcode(barcode):
             barcode_cache[clean_barcode] = (parsed, time.time())
             return jsonify(parsed)
 
-    # 3. Database 1 & 2 — Open Food Facts India & Global (v2 & v0 APIs)
+    # 3. Database 1 & 2 — Open Food Facts India & Global (parallel requests)
     off_endpoints = [
         ("https://in.openfoodfacts.org/api/v2/product/{code}.json", "Open Food Facts India"),
         ("https://world.openfoodfacts.org/api/v2/product/{code}.json", "Open Food Facts"),
@@ -303,20 +366,30 @@ def lookup_barcode(barcode):
         ("https://world.openfoodfacts.org/api/v0/product/{code}.json", "Open Food Facts")
     ]
 
-    for code in variations:
-        for url_pattern, source_name in off_endpoints:
-            try:
-                url = url_pattern.format(code=code)
-                res = req.get(url, headers={'User-Agent': 'NutriVision-India-Local-App/1.0 (https://nutrivision.in)'}, timeout=3.5)
-                if res.status_code == 200:
-                    data = res.json()
-                    if data.get('status') == 1 and 'product' in data:
-                        parsed = parse_off_nutriments(data['product'], source_name, clean_barcode)
-                        if parsed:
-                            barcode_cache[clean_barcode] = (parsed, time.time())
-                            return jsonify(parsed)
-            except Exception as e:
-                pass
+    def _try_off_endpoint(args):
+        url_pattern, source_name, code = args
+        try:
+            url = url_pattern.format(code=code)
+            r = req.get(url, headers={'User-Agent': 'NutriVision-India-Local-App/1.0'}, timeout=3.5)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get('status') == 1 and 'product' in data:
+                    return parse_off_nutriments(data['product'], source_name, clean_barcode)
+        except Exception:
+            pass
+        return None
+
+    tasks = [(u, s, c) for c in variations for u, s in off_endpoints]
+    with ThreadPoolExecutor(max_workers=min(8, len(tasks))) as ex:
+        futures = [ex.submit(_try_off_endpoint, t) for t in tasks]
+        for fut in as_completed(futures):
+            parsed = fut.result()
+            if parsed:
+                # Cancel remaining futures early
+                for f in futures:
+                    f.cancel()
+                barcode_cache[clean_barcode] = (parsed, time.time())
+                return jsonify(parsed)
 
     # 4. Database 3 — USDA FoodData Central (Branded & Foundation)
     for code in variations:
@@ -438,31 +511,42 @@ def call_gemini_vision_for_food(image_b64, mime_type, ensemble_hints):
         [f"{h['food'].replace('_', ' ')} ({h['confidence']})" for h in ensemble_hints]
     ) if ensemble_hints else "unknown"
 
-    prompt = f"""You are an expert Indian and global food nutritionist and portion-estimation AI.
+    prompt = f"""You are a precise Indian and global food recognition and nutrition expert AI.
 
-A user has photographed a meal. Our local image classifier suggests it could be one of:
+A user photographed their meal. Our ML classifier's top guesses (may be wrong):
   {hint_text}
 
-Your tasks:
-1. Look at the image carefully. Confirm the correct dish name (override the hint if you see something different).
-2. Estimate the serving weight in grams based on the visual plate/bowl size (typical Indian katori ~150g, full plate ~300-400g, snack ~50-100g).
-3. Provide accurate per-100g nutritional values for this dish:
-   - calories (kcal), protein (g), carbs (g), fat (g)
-4. Give a health score 1-10 for this dish (10 = very healthy, Indian diet context).
-5. Write one crisp sentence of nutritional insight (e.g. high protein, high glycaemic index, rich in fibre, etc.).
+STEP 1 — IDENTIFY: Look at the image carefully and identify the exact dish.
+  - If it clearly matches a classifier hint, confirm it.
+  - If the image shows something different, override with what you actually see.
+  - Be specific: "palak_paneer" not just "curry"; "masala_dosa" not just "dosa".
 
-Return ONLY a JSON object, no markdown, no backticks:
+STEP 2 — PORTION: Estimate serving weight in grams from visual cues:
+  - Small katori/bowl: ~120-180g
+  - Standard plate: ~250-400g
+  - Snack/bread piece: ~40-100g
+  - Drink/smoothie glass: ~200-300ml
+
+STEP 3 — NUTRITION (per 100g of the cooked dish, NOT raw ingredients):
+  Provide: calories (kcal), protein (g), carbohydrates (g), fat (g)
+  Use authoritative Indian nutrition databases (NIN Hyderabad / IFCT 2017).
+
+STEP 4 — HEALTH SCORE: 1-10 (Indian diet context, 10=excellent for health).
+
+STEP 5 — INSIGHT: One crisp sentence highlighting the key nutritional property.
+
+Return ONLY valid JSON, no markdown, no backticks:
 {{
-  "food_name": "dish name in English (use _ for spaces, e.g. dal_makhani)",
-  "food_display": "Human readable dish name (e.g. Dal Makhani)",
+  "food_name": "snake_case_dish_name",
+  "food_display": "Human Readable Dish Name",
   "calories_per_100g": 120,
   "protein": 6.5,
   "carbs": 14.0,
   "fat": 4.5,
   "portion_estimate_g": 200,
   "health_score": 7,
-  "confidence_note": "High confidence — clearly visible bowl of dal",
-  "ai_notes": "Rich in plant protein and complex carbs; moderate calorie density."
+  "confidence_note": "High — clearly visible bowl of dal with tadka",
+  "ai_notes": "Excellent plant protein source; rich in folate and iron."
 }}"""
 
     message_payload = {
@@ -757,102 +841,148 @@ def analyze():
     if not file.filename:
         return jsonify({'error': 'Empty filename'}), 400
 
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
+    # ── Security: extension + MIME prefix check ──
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_EXTENSIONS:
+        return jsonify({'error': f'Unsupported file type. Upload JPG, PNG, or WebP.'}), 400
 
-    # ── Step 1: PyTorch ensemble (3 models x 5 TTA = 15 predictions) ──
+    # Read bytes for size check (also avoids a second disk read later)
+    image_data = file.read()
+    if len(image_data) > MAX_UPLOAD_MB * 1024 * 1024:
+        return jsonify({'error': f'Image too large. Max {MAX_UPLOAD_MB} MB allowed.'}), 413
+
+    # ── Deduplication: reject if an identical-byte hash is already in flight ──
+    import hashlib as _hl
+    req_hash = _hl.sha1(image_data).hexdigest()
+    with _analyze_flight_lock:
+        if req_hash in _analyze_in_flight:
+            return jsonify({'error': 'Analysis already in progress for this image.'}), 429
+        _analyze_in_flight.add(req_hash)
+
+    try:
+        return _do_analyze(image_data, file.filename)
+    finally:
+        with _analyze_flight_lock:
+            _analyze_in_flight.discard(req_hash)
+
+
+def _do_analyze(image_data: bytes, original_filename: str):
+
+    filename = secure_filename(original_filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    with open(filepath, 'wb') as fout:
+        fout.write(image_data)
+    image_b64 = base64.b64encode(image_data).decode('utf-8')
+    fname_lower = filepath.lower()
+    if fname_lower.endswith('.png'):
+        mime_type = 'image/png'
+    elif fname_lower.endswith('.webp'):
+        mime_type = 'image/webp'
+    else:
+        mime_type = 'image/jpeg'
+
+    # ── Steps 1 & 2: Run PyTorch ensemble AND Gemini Vision IN PARALLEL ──
     _ensure_models_loaded()
     if not models_list:
         return jsonify({'error': 'Models could not be loaded. Please try again.'}), 500
 
-    pytorch_preds = ensemble_predict(filepath, models_list, class_names)
+    pytorch_preds = None
+    gemini_result_parallel = None
+
+    def _run_pytorch():
+        return ensemble_predict(filepath, models_list, class_names)
+
+    def _run_gemini(hints):
+        if not GEMINI_API_KEY:
+            return None
+        return call_gemini_vision_for_food(image_b64, mime_type, hints)
+
+    # Submit PyTorch first; Gemini needs pytorch hints, so we run a 2-phase approach:
+    # Phase A: PyTorch (fast, ~1-3s). Phase B: Gemini with hints (parallel if PyTorch already done)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        pytorch_future = executor.submit(_run_pytorch)
+        # Wait for PyTorch so we can pass hints to Gemini
+        try:
+            pytorch_preds = pytorch_future.result(timeout=30)
+        except Exception as e:
+            print(f"[ANALYZE] PyTorch failed: {e}")
+            pytorch_preds = []
+
+        # Filter hints to only high-confidence ones (>=30%) for cleaner Gemini context
+        confident_hints = [p for p in pytorch_preds if float(p['confidence'].replace('%','')) >= 30]
+        hints_for_gemini = confident_hints if confident_hints else pytorch_preds[:2]
+        if GEMINI_API_KEY and pytorch_preds:
+            gemini_future = executor.submit(_run_gemini, hints_for_gemini)
+            try:
+                gemini_result_parallel = gemini_future.result(timeout=25)
+            except Exception as e:
+                print(f"[ANALYZE] Gemini Vision exception: {e}")
+                gemini_result_parallel = None
+
+    if not pytorch_preds:
+        return jsonify({'error': 'Image analysis failed. Please try again.'}), 500
+
     top = pytorch_preds[0]
     confidence_val = float(top['confidence'].replace('%', ''))
-    print(f"[ANALYZE] PyTorch top prediction: {top['food']} ({confidence_val:.1f}%)")
+    print(f"[ANALYZE] PyTorch top: {top['food']} ({confidence_val:.1f}%)")
 
-    # ── Step 2: ALWAYS try Gemini Vision first (PyTorch hints passed in) ──
+    # ── Merge results ──
     ai_source = 'pytorch_ensemble'
     gemini_desc = ''
     final_preds = pytorch_preds
     top_food = top['food']
+    gemini_nutrition = None
 
-    if GEMINI_API_KEY:
-        print(f"[ANALYZE] Calling Gemini Vision with {len(pytorch_preds)} PyTorch hints...")
-        try:
-            with open(filepath, 'rb') as f:
-                image_data = f.read()
-            image_b64 = base64.b64encode(image_data).decode('utf-8')
-            fname_lower = filepath.lower()
-            if fname_lower.endswith('.png'):
-                mime_type = 'image/png'
-            elif fname_lower.endswith('.webp'):
-                mime_type = 'image/webp'
-            else:
-                mime_type = 'image/jpeg'
-
-            gemini_result = call_gemini_vision_for_food(image_b64, mime_type, pytorch_preds)
-            if gemini_result:
-                gname = gemini_result.get('food_name', '').strip()
-                if gname:
-                    ai_source = 'gemini_vision'
-                    top_food  = gname
-                    gemini_desc = gemini_result.get('ai_notes', '') or gemini_result.get('confidence_note', '')
-                    final_preds = [
-                        {
-                            'food':       top_food,
-                            'confidence': f"{gemini_result.get('health_score', 8) * 10}%",
-                            'source':     'gemini_vision',
-                            'display':    gemini_result.get('food_display', top_food.replace('_', ' ').title())
-                        },
-                        *[{'food': p['food'], 'confidence': p['confidence'], 'source': 'pytorch'}
-                          for p in pytorch_preds[:3]]
-                    ]
-                    # If Gemini returned nutrition directly, use it
-                    gemini_cal = gemini_result.get('calories_per_100g', 0)
-                    if gemini_cal:
-                        gemini_nutrition = {
-                            'calories_per_100g': gemini_cal,
-                            'protein':           gemini_result.get('protein', 0),
-                            'carbs':             gemini_result.get('carbs', 0),
-                            'fat':               gemini_result.get('fat', 0),
-                            'portion_estimate_g': gemini_result.get('portion_estimate_g', 150),
-                            'health_score':      gemini_result.get('health_score', 7),
-                            'notes':             gemini_desc
-                        }
-                    else:
-                        gemini_nutrition = None
-                    print(f"[ANALYZE] Gemini identified: {top_food} | Cal: {gemini_cal}")
-                else:
-                    print("[ANALYZE] Gemini returned empty food name, using PyTorch result")
-                    gemini_nutrition = None
-            else:
-                print("[ANALYZE] Gemini Vision returned no result, using PyTorch")
-                gemini_nutrition = None
-        except Exception as e:
-            print(f"[ANALYZE] Gemini Vision exception: {e}")
-            gemini_nutrition = None
+    if gemini_result_parallel:
+        gname = gemini_result_parallel.get('food_name', '').strip()
+        if gname:
+            ai_source = 'gemini_vision'
+            top_food  = gname
+            gemini_desc = gemini_result_parallel.get('ai_notes', '') or gemini_result_parallel.get('confidence_note', '')
+            final_preds = [
+                {
+                    'food':       top_food,
+                    'confidence': f"{gemini_result_parallel.get('health_score', 8) * 10}%",
+                    'source':     'gemini_vision',
+                    'display':    gemini_result_parallel.get('food_display', top_food.replace('_', ' ').title())
+                },
+                *[{'food': p['food'], 'confidence': p['confidence'], 'source': 'pytorch'}
+                  for p in pytorch_preds[:3]]
+            ]
+            gemini_cal = gemini_result_parallel.get('calories_per_100g', 0)
+            if gemini_cal:
+                gemini_nutrition = {
+                    'calories_per_100g': gemini_cal,
+                    'protein':           gemini_result_parallel.get('protein', 0),
+                    'carbs':             gemini_result_parallel.get('carbs', 0),
+                    'fat':               gemini_result_parallel.get('fat', 0),
+                    'portion_estimate_g': gemini_result_parallel.get('portion_estimate_g', 150),
+                    'health_score':      gemini_result_parallel.get('health_score', 7),
+                    'notes':             gemini_desc
+                }
+                print(f"[ANALYZE] Gemini identified: {top_food} | Cal: {gemini_cal}")
+        else:
+            print("[ANALYZE] Gemini returned empty food name, using PyTorch")
+    elif not GEMINI_API_KEY:
+        print("[ANALYZE] GEMINI_API_KEY not set — skipping Gemini Vision.")
     else:
-        print("[ANALYZE] GEMINI_API_KEY not set - skipping Gemini Vision. Set it in .env!")
-        gemini_nutrition = None
+        print("[ANALYZE] Gemini Vision returned no result, using PyTorch")
 
-    # ── Step 3: Nutrition lookup ──
-    local_db = load_json(DATA_PATH) or nutrition_db
-
-    # Use Gemini nutrition if available, else look up from DB
+    # ── Step 3: Nutrition lookup (fuzzy match, uses in-memory DB) ──
     if ai_source == 'gemini_vision' and gemini_nutrition:
         nutrition = gemini_nutrition
-        # Merge any extra fields from local DB if available
-        local_match = local_db.get(top_food, local_db.get(top_food.replace('_', ' '), {}))
+        local_match = fuzzy_nutrition_lookup(top_food, nutrition_db)
         if local_match:
             nutrition.setdefault('fiber', local_match.get('fiber', 0))
             nutrition.setdefault('category', local_match.get('category', 'Indian Food'))
     else:
-        nutrition = local_db.get(top_food, local_db.get(top_food.replace('_', ' '), {
-            'calories_per_100g': 200, 'protein': 5,
-            'carbs': 25, 'fat': 5, 'health_score': 5,
-            'notes': 'Detailed nutrition data coming soon.'
-        }))
+        nutrition = fuzzy_nutrition_lookup(top_food, nutrition_db)
+        if not nutrition:
+            nutrition = {
+                'calories_per_100g': 200, 'protein': 5,
+                'carbs': 25, 'fat': 5, 'health_score': 5,
+                'notes': 'Detailed nutrition data coming soon.'
+            }
 
     return jsonify({
         'predictions':        final_preds,
@@ -863,6 +993,43 @@ def analyze():
         'pytorch_confidence': confidence_val,
         'ai_verified':        ai_source == 'gemini_vision'
     })
+
+# ---------- USER CORRECTION LOGGING ----------
+@app.route('/api/log_correction', methods=['POST'])
+def log_correction():
+    """
+    Log user-confirmed food corrections.
+    Called when user clicks an alternate prediction chip after scanning.
+    Builds a training signal dataset over time.
+    """
+    data = request.json or {}
+    predicted  = data.get('predicted_food', '').strip()
+    corrected  = data.get('corrected_food', '').strip()
+    image_hash = data.get('image_hash', '').strip()
+    confidence = data.get('confidence', 0)
+    user_id    = data.get('user_id', 'default_user')
+
+    if not predicted or not corrected or predicted == corrected:
+        return jsonify({'success': False, 'reason': 'No meaningful correction'}), 400
+
+    try:
+        corrections = load_json(CORRECTIONS_PATH)
+        corrections.setdefault('entries', []).append({
+            'predicted':   predicted,
+            'corrected':   corrected,
+            'confidence':  confidence,
+            'image_hash':  image_hash,
+            'user_id':     user_id,
+            'timestamp':   datetime.now().isoformat()
+        })
+        # Keep last 2000 corrections to avoid unbounded growth
+        corrections['entries'] = corrections['entries'][-2000:]
+        save_json(CORRECTIONS_PATH, corrections)
+        print(f"[CORRECTION] {predicted} → {corrected} (conf:{confidence}%)")
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"[CORRECTION] Error: {e}")
+        return jsonify({'success': False}), 500
 
 # ---------- FOOD SEARCH (LOCAL + USDA + OPEN FOOD FACTS) ----------
 @app.route('/api/search_food')
@@ -879,48 +1046,67 @@ def search_food():
         return jsonify({'results': cached})
 
     q_lower = query.lower()
-    results = []
+    exact_results = []    # exact name match
+    prefix_results = []   # starts with query
+    contain_results = []  # contains query
     seen    = set()
 
     # Non-veg keywords
     non_veg_keywords = ['chicken', 'mutton', 'fish', 'egg', 'prawn', 'meat', 'beef', 'pork', 'keema', 'biryani_chicken']
 
-    # 1. LOCAL Indian database — highest priority
-    local_db = load_json(DATA_PATH) or nutrition_db
-    for food_key, nutrition in local_db.items():
+    # 1. LOCAL Indian database — highest priority, ranked by relevance
+    for food_key, nut in nutrition_db.items():
         food_name_clean = food_key.lower().replace('_', ' ')
-        food_cat = (nutrition.get('category') or '').lower()
-        
-        matches_query = not q_lower or (q_lower in food_name_clean)
-        
+        food_cat = (nut.get('category') or '').lower()
+
         matches_cat = True
         if category_filter and category_filter != 'all':
             if category_filter == 'high_protein':
-                matches_cat = nutrition.get('protein', 0) >= 8
+                matches_cat = nut.get('protein', 0) >= 8
             elif category_filter in ['breakfast', 'curry', 'rice', 'dal', 'snacks', 'dairy', 'breads', 'sweets']:
                 matches_cat = (category_filter in food_cat) or (category_filter in food_name_clean)
             else:
                 matches_cat = (category_filter in food_cat)
 
-        if matches_query and matches_cat:
-            key = food_key[:25]
-            if key not in seen:
-                seen.add(key)
-                is_non_veg = any(kw in food_name_clean for kw in non_veg_keywords)
-                results.append({
-                    'name':             food_key,
-                    'display_name':     food_key.replace('_', ' ').title(),
-                    'calories_per_100g': nutrition.get('calories_per_100g', 0),
-                    'protein':          nutrition.get('protein', 0),
-                    'carbs':            nutrition.get('carbs', 0),
-                    'fat':              nutrition.get('fat', 0),
-                    'fiber':            nutrition.get('fiber', 0),
-                    'health_score':     nutrition.get('health_score', 5),
-                    'category':         nutrition.get('category', 'Indian Food'),
-                    'is_veg':           not is_non_veg,
-                    'notes':            nutrition.get('notes', ''),
-                    'source':           'local'
-                })
+        if not matches_cat:
+            continue
+
+        if q_lower:
+            if food_name_clean == q_lower:
+                bucket = exact_results
+            elif food_name_clean.startswith(q_lower):
+                bucket = prefix_results
+            elif q_lower in food_name_clean:
+                bucket = contain_results
+            else:
+                continue
+        else:
+            bucket = contain_results  # no query → return all
+
+        key = food_key[:25]
+        if key in seen:
+            continue
+        seen.add(key)
+
+        is_non_veg = any(kw in food_name_clean for kw in non_veg_keywords)
+        entry = {
+            'name':              food_key,
+            'display_name':      food_key.replace('_', ' ').title(),
+            'calories_per_100g': nut.get('calories_per_100g', 0),
+            'protein':           nut.get('protein', 0),
+            'carbs':             nut.get('carbs', 0),
+            'fat':               nut.get('fat', 0),
+            'fiber':             nut.get('fiber', 0),
+            'health_score':      nut.get('health_score', 5),
+            'category':          nut.get('category', 'Indian Food'),
+            'is_veg':            not is_non_veg,
+            'notes':             nut.get('notes', ''),
+            'source':            'local'
+        }
+        bucket.append(entry)
+
+    # Merge ranked local results
+    results = exact_results + prefix_results + contain_results
 
     # 2. USDA FoodData Central — 500,000+ foods (only if specific query given)
     if q_lower and len(results) < 15:
@@ -1387,6 +1573,819 @@ def coach_quick_insight():
         return jsonify({'success': True, 'insight': reply})
     else:
         return jsonify({'success': False, 'error': reply})
+
+# ============================================================
+# FEATURE: MULTI-FOOD PLATE DETECTION
+# ============================================================
+@app.route('/api/analyze_plate', methods=['POST'])
+def analyze_plate():
+    """
+    Detect multiple foods in one plate image using Gemini Vision.
+    Returns a list of foods with estimated portions and nutrition.
+    """
+    if not GEMINI_API_KEY:
+        return jsonify({'error': 'Gemini API key required for multi-food detection'}), 400
+
+    image_file = request.files.get('file')
+    if not image_file:
+        return jsonify({'error': 'No image uploaded'}), 400
+
+    image_data = image_file.read()
+    if len(image_data) > MAX_UPLOAD_MB * 1024 * 1024:
+        return jsonify({'error': f'Image too large. Max {MAX_UPLOAD_MB} MB.'}), 413
+
+    fname = (image_file.filename or '').lower()
+    if fname.endswith('.png'):   mime = 'image/png'
+    elif fname.endswith('.webp'): mime = 'image/webp'
+    else:                         mime = 'image/jpeg'
+
+    image_b64 = base64.b64encode(image_data).decode('utf-8')
+
+    prompt = """You are an expert Indian food nutritionist and computer vision AI.
+
+Analyze this meal image and identify ALL distinct food items visible on the plate/tray.
+
+For EACH food item:
+1. Identify the dish name precisely (e.g. "dal_tadka", "jeera_rice", "raita")
+2. Estimate its portion weight in grams based on visual size
+3. Provide per-100g nutrition (calories, protein, carbs, fat)
+4. Give a health score 1-10
+
+Return ONLY a JSON array (no markdown):
+[
+  {
+    "food_name": "dal_tadka",
+    "food_display": "Dal Tadka",
+    "portion_g": 150,
+    "calories_per_100g": 116,
+    "protein": 6.5,
+    "carbs": 16.0,
+    "fat": 3.5,
+    "health_score": 8,
+    "notes": "Excellent protein source"
+  }
+]
+
+Detect up to 8 items. If only 1 item, still return an array with 1 element."""
+
+    message_payload = {
+        'role': 'user',
+        'parts': [
+            {'text': prompt},
+            {'inline_data': {'mime_type': mime, 'data': image_b64}}
+        ]
+    }
+
+    success, reply = call_gemini_api(
+        messages=[message_payload],
+        system_prompt="You are a precise food vision AI. Return only valid JSON arrays.",
+        max_tokens=2048
+    )
+
+    if not success or not reply:
+        return jsonify({'error': 'Could not analyze plate'}), 500
+
+    try:
+        clean = reply.replace('```json', '').replace('```', '').strip()
+        start = clean.find('[')
+        end = clean.rfind(']')
+        if start == -1 or end == -1:
+            return jsonify({'error': 'Invalid AI response'}), 500
+
+        foods = json.loads(clean[start:end+1])
+        total_cal = sum(f.get('calories_per_100g', 0) * f.get('portion_g', 100) / 100 for f in foods)
+        total_pro = sum(f.get('protein', 0) * f.get('portion_g', 100) / 100 for f in foods)
+        total_carb = sum(f.get('carbs', 0) * f.get('portion_g', 100) / 100 for f in foods)
+        total_fat = sum(f.get('fat', 0) * f.get('portion_g', 100) / 100 for f in foods)
+
+        return jsonify({
+            'foods': foods,
+            'total_nutrition': {
+                'calories': round(total_cal),
+                'protein': round(total_pro, 1),
+                'carbs': round(total_carb, 1),
+                'fat': round(total_fat, 1)
+            },
+            'food_count': len(foods)
+        })
+    except Exception as e:
+        print(f"[MULTI-FOOD] Parse error: {e}")
+        return jsonify({'error': 'Failed to parse food detection result'}), 500
+
+
+# ============================================================
+# FEATURE: EXERCISE LOGGING & NET CALORIES
+# ============================================================
+EXERCISE_PATH = os.path.join(BASE_DIR, 'data', 'exercise_log.json')
+
+# MET values for common exercises (metabolic equivalent)
+EXERCISE_MET = {
+    'walking': 3.5, 'running': 9.8, 'jogging': 7.0, 'cycling': 7.5,
+    'swimming': 8.0, 'yoga': 2.5, 'gym_strength': 5.0, 'gym_cardio': 6.5,
+    'hiit': 10.0, 'cricket': 4.8, 'badminton': 5.5, 'football': 8.0,
+    'basketball': 8.0, 'dancing': 5.0, 'skipping': 11.0, 'climbing_stairs': 8.0,
+    'household_chores': 3.0, 'stretching': 2.3, 'pilates': 3.8, 'zumba': 6.0
+}
+
+@app.route('/api/log_exercise', methods=['POST'])
+def log_exercise():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    target_date = data.get('date') or str(date.today())
+    exercise_type = data.get('exercise_type', 'walking').lower().replace(' ', '_')
+    duration_min = float(data.get('duration_min', 30))
+    weight_kg = data.get('weight_kg', 70)
+
+    met = EXERCISE_MET.get(exercise_type, 4.0)
+    calories_burned = round(met * weight_kg * (duration_min / 60))
+
+    ex_log = load_json(EXERCISE_PATH)
+    ex_log.setdefault(user_id, {}).setdefault(target_date, [])
+    ex_log[user_id][target_date].append({
+        'exercise': exercise_type,
+        'duration_min': duration_min,
+        'calories_burned': calories_burned,
+        'met': met,
+        'time': datetime.now().strftime('%H:%M')
+    })
+    save_json(EXERCISE_PATH, ex_log)
+
+    total_burned = sum(e.get('calories_burned', 0) for e in ex_log[user_id][target_date])
+
+    # Net calories = food calories - exercise calories
+    diary = load_json(DIARY_PATH)
+    totals, _ = get_day_totals(diary, user_id, target_date)
+    net_calories = round(totals.get('calories', 0) - total_burned)
+
+    return jsonify({
+        'success': True,
+        'calories_burned': calories_burned,
+        'total_burned_today': total_burned,
+        'net_calories_today': net_calories,
+        'exercise_log': ex_log[user_id][target_date]
+    })
+
+@app.route('/api/get_exercise/<user_id>')
+def get_exercise(user_id):
+    target_date = request.args.get('date') or str(date.today())
+    ex_log = load_json(EXERCISE_PATH)
+    entries = ex_log.get(user_id, {}).get(target_date, [])
+    total_burned = sum(e.get('calories_burned', 0) for e in entries)
+
+    diary = load_json(DIARY_PATH)
+    totals, _ = get_day_totals(diary, user_id, target_date)
+    net_calories = round(totals.get('calories', 0) - total_burned)
+
+    return jsonify({
+        'entries': entries,
+        'total_burned': total_burned,
+        'net_calories': net_calories,
+        'date': target_date
+    })
+
+@app.route('/api/delete_exercise', methods=['POST'])
+def delete_exercise():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    target_date = data.get('date') or str(date.today())
+    idx = data.get('index')
+    ex_log = load_json(EXERCISE_PATH)
+    entries = ex_log.get(user_id, {}).get(target_date, [])
+    if idx is not None and 0 <= idx < len(entries):
+        entries.pop(idx)
+        ex_log[user_id][target_date] = entries
+        save_json(EXERCISE_PATH, ex_log)
+        return jsonify({'success': True, 'entries': entries})
+    return jsonify({'success': False}), 400
+
+@app.route('/api/exercise_types')
+def exercise_types():
+    return jsonify({k: v for k, v in EXERCISE_MET.items()})
+
+
+# ============================================================
+# FEATURE: BODY WEIGHT TRACKER
+# ============================================================
+WEIGHT_PATH = os.path.join(BASE_DIR, 'data', 'weight_log.json')
+
+@app.route('/api/log_weight', methods=['POST'])
+def log_weight():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    weight_kg = float(data.get('weight_kg', 0))
+    log_date = data.get('date') or str(date.today())
+    notes = data.get('notes', '')
+
+    if weight_kg <= 0 or weight_kg > 500:
+        return jsonify({'success': False, 'error': 'Invalid weight'}), 400
+
+    wlog = load_json(WEIGHT_PATH)
+    wlog.setdefault(user_id, {})[log_date] = {
+        'weight_kg': weight_kg,
+        'notes': notes,
+        'logged_at': datetime.now().isoformat()
+    }
+    save_json(WEIGHT_PATH, wlog)
+
+    # Calculate progress
+    entries = sorted(wlog[user_id].items())
+    change = 0
+    if len(entries) >= 2:
+        change = round(weight_kg - entries[0][1]['weight_kg'], 1)
+
+    return jsonify({'success': True, 'weight_kg': weight_kg, 'total_change_kg': change, 'date': log_date})
+
+@app.route('/api/get_weight/<user_id>')
+def get_weight(user_id):
+    days = int(request.args.get('days', 30))
+    wlog = load_json(WEIGHT_PATH)
+    user_data = wlog.get(user_id, {})
+    entries = sorted(user_data.items())[-days:]  # last N days
+    return jsonify({
+        'entries': [{'date': d, 'weight_kg': v['weight_kg'], 'notes': v.get('notes', '')} for d, v in entries],
+        'count': len(entries)
+    })
+
+
+# ============================================================
+# FEATURE: FAVOURITE MEALS (1-TAP QUICK LOG)
+# ============================================================
+FAVOURITES_PATH = os.path.join(BASE_DIR, 'data', 'favourites.json')
+
+@app.route('/api/save_favourite', methods=['POST'])
+def save_favourite():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    meal_name = data.get('name', '').strip()
+    if not meal_name:
+        return jsonify({'success': False, 'error': 'Meal name required'}), 400
+
+    favs = load_json(FAVOURITES_PATH)
+    favs.setdefault(user_id, {})[meal_name] = {
+        'food': data.get('food', meal_name),
+        'display_name': data.get('display_name', meal_name),
+        'portion': data.get('portion', 100),
+        'calories': data.get('calories', 0),
+        'protein': data.get('protein', 0),
+        'carbs': data.get('carbs', 0),
+        'fat': data.get('fat', 0),
+        'meal_type': data.get('meal_type', 'lunch'),
+        'saved_at': datetime.now().isoformat()
+    }
+    save_json(FAVOURITES_PATH, favs)
+    return jsonify({'success': True, 'saved': meal_name})
+
+@app.route('/api/get_favourites/<user_id>')
+def get_favourites(user_id):
+    favs = load_json(FAVOURITES_PATH)
+    user_favs = favs.get(user_id, {})
+    return jsonify({'favourites': list(user_favs.values()), 'count': len(user_favs)})
+
+@app.route('/api/delete_favourite', methods=['POST'])
+def delete_favourite():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    meal_name = data.get('name', '').strip()
+    favs = load_json(FAVOURITES_PATH)
+    if user_id in favs and meal_name in favs[user_id]:
+        del favs[user_id][meal_name]
+        save_json(FAVOURITES_PATH, favs)
+        return jsonify({'success': True})
+    return jsonify({'success': False}), 404
+
+@app.route('/api/quicklog_favourite', methods=['POST'])
+def quicklog_favourite():
+    """1-tap log a favourite meal to today's diary"""
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    meal_name = data.get('name', '').strip()
+    target_date = data.get('date') or str(date.today())
+
+    favs = load_json(FAVOURITES_PATH)
+    meal = favs.get(user_id, {}).get(meal_name)
+    if not meal:
+        return jsonify({'success': False, 'error': 'Favourite not found'}), 404
+
+    diary = load_json(DIARY_PATH)
+    diary.setdefault(user_id, {}).setdefault(target_date, []).append({
+        'food': meal['food'],
+        'portion': meal['portion'],
+        'calories': meal['calories'],
+        'protein': meal['protein'],
+        'carbs': meal['carbs'],
+        'fat': meal['fat'],
+        'meal_type': meal['meal_type'],
+        'time': datetime.now().strftime('%H:%M'),
+        'source': 'favourite'
+    })
+    save_json(DIARY_PATH, diary)
+    totals, entries = get_day_totals(diary, user_id, target_date)
+    return jsonify({'success': True, 'today_totals': totals, 'entries': entries})
+
+
+# ============================================================
+# FEATURE: CUSTOM RECIPE BUILDER
+# ============================================================
+RECIPES_PATH = os.path.join(BASE_DIR, 'data', 'recipes.json')
+
+@app.route('/api/save_recipe', methods=['POST'])
+def save_recipe():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    recipe_name = data.get('name', '').strip()
+    ingredients = data.get('ingredients', [])  # [{name, grams, calories_per_100g, protein, carbs, fat}]
+    servings = int(data.get('servings', 1))
+
+    if not recipe_name or not ingredients:
+        return jsonify({'success': False, 'error': 'Name and ingredients required'}), 400
+
+    total_g = sum(i.get('grams', 0) for i in ingredients)
+    total_cal = sum(i.get('calories_per_100g', 0) * i.get('grams', 0) / 100 for i in ingredients)
+    total_pro = sum(i.get('protein', 0) * i.get('grams', 0) / 100 for i in ingredients)
+    total_carb = sum(i.get('carbs', 0) * i.get('grams', 0) / 100 for i in ingredients)
+    total_fat = sum(i.get('fat', 0) * i.get('grams', 0) / 100 for i in ingredients)
+    cooked_weight = data.get('cooked_weight_g', total_g * 0.85)  # ~15% water loss on cooking
+
+    per_serving_g = cooked_weight / servings if servings > 0 else cooked_weight
+    per_100g_cal = (total_cal / cooked_weight * 100) if cooked_weight else 0
+
+    recipes = load_json(RECIPES_PATH)
+    recipes.setdefault(user_id, {})[recipe_name] = {
+        'name': recipe_name,
+        'ingredients': ingredients,
+        'servings': servings,
+        'cooked_weight_g': round(cooked_weight),
+        'per_serving_g': round(per_serving_g),
+        'total_calories': round(total_cal),
+        'nutrition_per_100g': {
+            'calories_per_100g': round(per_100g_cal),
+            'protein': round(total_pro / cooked_weight * 100, 1) if cooked_weight else 0,
+            'carbs': round(total_carb / cooked_weight * 100, 1) if cooked_weight else 0,
+            'fat': round(total_fat / cooked_weight * 100, 1) if cooked_weight else 0,
+        },
+        'created_at': datetime.now().isoformat()
+    }
+    save_json(RECIPES_PATH, recipes)
+    return jsonify({'success': True, 'recipe': recipes[user_id][recipe_name]})
+
+@app.route('/api/get_recipes/<user_id>')
+@app.route('/api/get_saved_recipes/<user_id>')
+def get_recipes(user_id):
+    recipes = load_json(RECIPES_PATH)
+    user_recipes = list(recipes.get(user_id, {}).values())
+    return jsonify({'recipes': user_recipes, 'count': len(user_recipes)})
+
+@app.route('/api/delete_recipe', methods=['POST'])
+def delete_recipe():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    name = data.get('name', '').strip()
+    recipes = load_json(RECIPES_PATH)
+    if user_id in recipes and name in recipes[user_id]:
+        del recipes[user_id][name]
+        save_json(RECIPES_PATH, recipes)
+        return jsonify({'success': True})
+    return jsonify({'success': False}), 404
+
+
+# ============================================================
+# FEATURE: VOICE FOOD LOGGING
+# ============================================================
+@app.route('/api/voice_log', methods=['POST'])
+def voice_log():
+    """
+    Parse a natural language voice/text input like:
+    "I had 2 rotis with dal and a cup of curd for dinner"
+    Returns structured meal data ready to log.
+    """
+    data = request.json or {}
+    transcript = data.get('text', '').strip()
+    user_id = data.get('user_id', 'default_user')
+    api_key = data.get('api_key', '').strip()
+
+    if not transcript:
+        return jsonify({'success': False, 'error': 'No text provided'}), 400
+
+    prompt = f"""Parse this food intake description and extract all food items with quantities:
+
+Input: "{transcript}"
+
+For each food item mentioned, return structured nutrition data.
+Common Indian portions: 1 roti/chapati = 35g, 1 phulka = 30g, 1 paratha = 80g,
+1 cup dal = 150g, 1 katori dal = 150g, 1 cup rice = 180g, 1 plate biryani = 300g,
+1 katori sabzi/curry = 150g, 1 glass milk = 200ml, 1 egg = 50g,
+1 banana = 120g, 1 apple = 150g, 1 cup curd/dahi = 200g,
+1 piece chicken = 100g, 1 serving paneer = 100g.
+
+Determine the meal type from context (breakfast/lunch/dinner/snack).
+Use accurate ICMR/NIN Indian nutrition values.
+
+Return ONLY a JSON object (no markdown):
+{{
+  "meal_type": "dinner",
+  "items": [
+    {{
+      "food": "butter_chicken",
+      "display_name": "Butter Chicken",
+      "quantity_description": "1 serving",
+      "portion_g": 250,
+      "calories_per_100g": 150,
+      "calories": 375,
+      "protein": 14.0,
+      "carbs": 8.0,
+      "fat": 10.0,
+      "fiber": 1.0
+    }}
+  ],
+  "total_calories": 375,
+  "total_protein": 14.0,
+  "confidence": "high"
+}}
+
+CRITICAL: The "calories" field must equal calories_per_100g * portion_g / 100 (rounded).
+Every item MUST have a non-zero "calories" value."""
+
+    success, reply = call_gemini_api(
+        messages=[{'role': 'user', 'content': prompt}],
+        system_prompt="You are a precise Indian food nutrition parser. Return only valid JSON.",
+        api_key=api_key,
+        max_tokens=1500
+    )
+
+    if not success or not reply:
+        return jsonify({'success': False, 'error': 'Could not parse food input'}), 500
+
+    try:
+        clean = reply.replace('```json', '').replace('```', '').strip()
+        start = clean.find('{')
+        end = clean.rfind('}')
+        parsed = json.loads(clean[start:end+1])
+        return jsonify({'success': True, 'parsed': parsed, 'original_text': transcript})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Parse error: {e}'}), 500
+
+
+# ============================================================
+# FEATURE: MICRONUTRIENT TRACKING
+# ============================================================
+MICRONUTRIENT_DB = {
+    'dal': {'iron': 3.9, 'calcium': 73, 'vitamin_b12': 0, 'vitamin_d': 0, 'zinc': 1.6, 'folate': 180, 'fiber': 7.9},
+    'paneer': {'iron': 0.5, 'calcium': 208, 'vitamin_b12': 0.6, 'vitamin_d': 0, 'zinc': 1.5, 'folate': 12, 'fiber': 0},
+    'egg': {'iron': 1.8, 'calcium': 50, 'vitamin_b12': 0.9, 'vitamin_d': 2.0, 'zinc': 1.3, 'folate': 47, 'fiber': 0},
+    'chicken': {'iron': 1.3, 'calcium': 15, 'vitamin_b12': 0.5, 'vitamin_d': 0.1, 'zinc': 2.0, 'folate': 9, 'fiber': 0},
+    'milk': {'iron': 0.1, 'calcium': 120, 'vitamin_b12': 0.9, 'vitamin_d': 1.2, 'zinc': 0.4, 'folate': 5, 'fiber': 0},
+    'spinach': {'iron': 2.7, 'calcium': 99, 'vitamin_b12': 0, 'vitamin_d': 0, 'zinc': 0.5, 'folate': 194, 'fiber': 2.2},
+    'roti': {'iron': 1.5, 'calcium': 18, 'vitamin_b12': 0, 'vitamin_d': 0, 'zinc': 0.6, 'folate': 20, 'fiber': 2.7},
+    'rice': {'iron': 0.3, 'calcium': 10, 'vitamin_b12': 0, 'vitamin_d': 0, 'zinc': 0.5, 'folate': 8, 'fiber': 0.3},
+}
+
+DAILY_MICRONUTRIENT_TARGETS = {
+    'iron': {'mg': 18, 'unit': 'mg', 'label': 'Iron'},
+    'calcium': {'mg': 1000, 'unit': 'mg', 'label': 'Calcium'},
+    'vitamin_b12': {'mg': 2.4, 'unit': 'μg', 'label': 'Vitamin B12'},
+    'vitamin_d': {'mg': 15, 'unit': 'μg', 'label': 'Vitamin D'},
+    'zinc': {'mg': 11, 'unit': 'mg', 'label': 'Zinc'},
+    'folate': {'mg': 400, 'unit': 'μg', 'label': 'Folate'},
+    'fiber': {'mg': 30, 'unit': 'g', 'label': 'Dietary Fiber'},
+}
+
+@app.route('/api/get_micronutrients/<user_id>')
+@app.route('/api/micronutrients/<user_id>')
+def get_micronutrients(user_id):
+    target_date = request.args.get('date') or str(date.today())
+    diary = load_json(DIARY_PATH)
+    entries = diary.get(user_id, {}).get(target_date, [])
+
+    totals = {k: 0.0 for k in DAILY_MICRONUTRIENT_TARGETS}
+    for entry in entries:
+        food_key = entry.get('food', '').lower().replace(' ', '_')
+        portion_g = entry.get('portion', 100)
+        factor = portion_g / 100
+        micro = MICRONUTRIENT_DB.get(food_key, {})
+        for k in totals:
+            totals[k] += micro.get(k, 0) * factor
+
+    result = []
+    for key, target_info in DAILY_MICRONUTRIENT_TARGETS.items():
+        consumed = round(totals[key], 1)
+        target_val = target_info['mg']
+        pct = min(100, round(consumed / target_val * 100)) if target_val else 0
+        result.append({
+            'key': key,
+            'label': target_info['label'],
+            'consumed': consumed,
+            'target': target_val,
+            'unit': target_info['unit'],
+            'percent': pct,
+            'status': 'good' if pct >= 70 else 'low' if pct >= 30 else 'deficient'
+        })
+
+    return jsonify({'micronutrients': result, 'date': target_date})
+
+
+# ============================================================
+# FEATURE: WEEKLY ANALYTICS & TRENDS
+# ============================================================
+@app.route('/api/get_analytics/<user_id>')
+def get_analytics(user_id):
+    days = int(request.args.get('days', 7))
+    diary = load_json(DIARY_PATH)
+    wlog = load_json(WEIGHT_PATH)
+    ex_log = load_json(EXERCISE_PATH)
+
+    analytics = []
+    for i in range(days - 1, -1, -1):
+        from datetime import timedelta
+        d = str(date.today() - timedelta(days=i))
+        totals, entries = get_day_totals(diary, user_id, d)
+
+        exercise_entries = ex_log.get(user_id, {}).get(d, [])
+        burned = sum(e.get('calories_burned', 0) for e in exercise_entries)
+
+        weight_entry = wlog.get(user_id, {}).get(d, {})
+
+        analytics.append({
+            'date': d,
+            'calories': totals.get('calories', 0),
+            'protein': totals.get('protein', 0),
+            'carbs': totals.get('carbs', 0),
+            'fat': totals.get('fat', 0),
+            'calories_burned': burned,
+            'net_calories': totals.get('calories', 0) - burned,
+            'meal_count': len(entries),
+            'weight_kg': weight_entry.get('weight_kg', None)
+        })
+
+    # Averages
+    logged_days = [d for d in analytics if d['meal_count'] > 0]
+    avg_cal = round(sum(d['calories'] for d in logged_days) / len(logged_days)) if logged_days else 0
+    avg_pro = round(sum(d['protein'] for d in logged_days) / len(logged_days), 1) if logged_days else 0
+    streak = 0
+    for d in reversed(analytics):
+        if d['meal_count'] > 0:
+            streak += 1
+        else:
+            break
+
+    return jsonify({
+        'days': analytics,
+        'averages': {'calories': avg_cal, 'protein': avg_pro},
+        'streak_days': streak,
+        'logged_days': len(logged_days),
+        'total_days': days
+    })
+
+
+# ============================================================
+# FEATURE: AI MEAL PLAN GENERATOR
+# ============================================================
+@app.route('/api/generate_meal_plan', methods=['POST'])
+def generate_meal_plan():
+    data = request.json or {}
+    user_id = data.get('user_id', 'default_user')
+    api_key = data.get('api_key', '').strip()
+    days = int(data.get('days', 7))
+    days = min(days, 7)  # max 7 days
+
+    profiles = load_json(PROFILE_PATH)
+    profile = profiles.get(user_id, {})
+    targets = profile.get('targets', {'calories': 2000, 'protein_g': 120, 'carbs_g': 220, 'fat_g': 55})
+    goal = profile.get('goal', 'maintain')
+    name = profile.get('name', 'User')
+
+    preferences = data.get('preferences', {})
+    diet_type = preferences.get('diet', 'vegetarian')
+    avoid = preferences.get('avoid', [])
+    region = preferences.get('region', 'North Indian')
+
+    prompt = f"""Create a detailed {days}-day Indian meal plan for {name}.
+
+Profile:
+- Goal: {goal} | Calories: {targets.get('calories', 2000)} kcal/day
+- Protein target: {targets.get('protein_g', 120)}g | Carbs: {targets.get('carbs_g', 220)}g | Fat: {targets.get('fat_g', 55)}g
+- Diet type: {diet_type}
+- Regional preference: {region}
+- Foods to avoid: {', '.join(avoid) if avoid else 'None'}
+
+For each day, provide 4 meals (breakfast, lunch, dinner, snack) with:
+- Specific Indian dishes with quantities in grams
+- Approximate calories and protein per meal
+
+Return ONLY a JSON object:
+{{
+  "plan": [
+    {{
+      "day": 1,
+      "day_label": "Monday",
+      "total_calories": 1980,
+      "total_protein": 118,
+      "meals": {{
+        "breakfast": {{
+          "items": ["Oats Upma (200g)", "Boiled Egg (2)"],
+          "calories": 380,
+          "protein": 22,
+          "time": "8:00 AM"
+        }},
+        "lunch": {{
+          "items": ["Brown Rice (150g)", "Rajma Curry (150g)", "Raita (100g)"],
+          "calories": 550,
+          "protein": 28,
+          "time": "1:00 PM"
+        }},
+        "snack": {{
+          "items": ["Roasted Chana (50g)", "Green Tea"],
+          "calories": 190,
+          "protein": 9,
+          "time": "4:30 PM"
+        }},
+        "dinner": {{
+          "items": ["Palak Paneer (150g)", "Roti (2)", "Cucumber Salad"],
+          "calories": 480,
+          "protein": 22,
+          "time": "8:00 PM"
+        }}
+      }}
+    }}
+  ],
+  "shopping_list": ["Oats", "Eggs", "Brown Rice", "Rajma", "Paneer", "Spinach"],
+  "tips": ["Drink 3L water daily", "Eat dinner before 8PM for better fat loss"]
+}}"""
+
+    success, reply = call_gemini_api(
+        messages=[{'role': 'user', 'content': prompt}],
+        system_prompt="You are an expert Indian dietitian. Return only valid JSON meal plans.",
+        api_key=api_key,
+        max_tokens=4000
+    )
+
+    if not success or not reply:
+        return jsonify({'success': False, 'error': 'Could not generate meal plan'}), 500
+
+    try:
+        clean = reply.replace('```json', '').replace('```', '').strip()
+        start = clean.find('{')
+        end = clean.rfind('}')
+        plan_data = json.loads(clean[start:end+1])
+        return jsonify({'success': True, 'meal_plan': plan_data, 'days': days})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Parse error: {e}'}), 500
+
+
+# ============================================================
+# FEATURE: DIABETES / HEALTH CONDITION MODE
+# ============================================================
+GLYCEMIC_INDEX = {
+    'white_rice': 73, 'brown_rice': 50, 'roti': 62, 'chapati': 52, 'paratha': 63,
+    'dal': 29, 'rajma': 24, 'chana': 28, 'moong': 31, 'samosa': 67,
+    'poha': 76, 'idli': 70, 'dosa': 77, 'upma': 65, 'oats': 55,
+    'banana': 51, 'apple': 36, 'mango': 51, 'grapes': 59, 'watermelon': 76,
+    'potato': 78, 'sweet_potato': 63, 'bread': 75, 'paneer': 27,
+    'milk': 31, 'curd': 35, 'biryani': 65, 'khichdi': 58,
+}
+
+@app.route('/api/get_glycemic_info', methods=['POST', 'GET'])
+@app.route('/api/glycemic_index', methods=['POST', 'GET'])
+def get_glycemic_info():
+    data = (request.json if request.is_json else None) or {}
+    user_id = data.get('user_id') or request.args.get('user_id', 'default_user')
+    target_date = data.get('date') or request.args.get('date') or str(date.today())
+
+    diary = load_json(DIARY_PATH)
+    entries = diary.get(user_id, {}).get(target_date, [])
+
+    foods_with_gi = []
+    total_gl = 0  # glycemic load
+
+    for entry in entries:
+        food_key = entry.get('food', '').lower().replace(' ', '_')
+        gi = GLYCEMIC_INDEX.get(food_key, None)
+        portion_g = entry.get('portion', 100)
+        carbs_in_portion = entry.get('carbs', 0)
+
+        gl = round((gi * carbs_in_portion) / 100) if gi else None
+        if gl:
+            total_gl += gl
+
+        foods_with_gi.append({
+            'food': entry.get('food'),
+            'portion_g': portion_g,
+            'glycemic_index': gi,
+            'glycemic_load': gl,
+            'gi_category': 'High (>70)' if gi and gi > 70 else 'Medium (56-70)' if gi and gi >= 56 else 'Low (<56)' if gi else 'Unknown',
+            'diabetes_friendly': gi is None or gi < 55
+        })
+
+    daily_gl_status = 'High' if total_gl > 20 else 'Moderate' if total_gl > 10 else 'Low'
+    return jsonify({
+        'foods': foods_with_gi,
+        'total_glycemic_load': total_gl,
+        'daily_gl_status': daily_gl_status,
+        'recommendation': 'Consider lower GI alternatives' if total_gl > 15 else 'Good blood sugar management today!',
+        'date': target_date
+    })
+
+
+# ============================================================
+# PWA MANIFEST
+# ============================================================
+from flask import Response
+
+@app.route('/manifest.json')
+def pwa_manifest():
+    manifest = {
+        "name": "NutriVision India",
+        "short_name": "NutriVision",
+        "description": "AI-powered Indian food nutrition tracker",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0a0a0f",
+        "theme_color": "#f97316",
+        "orientation": "portrait-primary",
+        "icons": [
+            {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+        ],
+        "categories": ["health", "fitness", "food"],
+        "shortcuts": [
+            {"name": "Scan Food", "url": "/?screen=foodlog&tab=scan", "description": "Scan food with AI"},
+            {"name": "Log Meal", "url": "/?screen=foodlog&tab=search", "description": "Search and log meal"}
+        ]
+    }
+    return Response(json.dumps(manifest), mimetype='application/manifest+json')
+
+@app.route('/sw.js')
+def service_worker():
+    sw_js = """
+const CACHE_NAME = 'nutrivision-v1';
+const STATIC_ASSETS = ['/', '/static/css/main.css', '/static/js/app.js'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(STATIC_ASSETS)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+  ));
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+  if (e.request.url.includes('/api/') || e.request.url.includes('/analyze')) return;
+  e.respondWith(
+    caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
+      const clone = res.clone();
+      caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+      return res;
+    }))
+  );
+});
+"""
+    return Response(sw_js, mimetype='application/javascript')
+
+
+# ============================================================
+# STATS SUMMARY ENDPOINT (for dashboard)
+# ============================================================
+@app.route('/api/dashboard_stats/<user_id>')
+def dashboard_stats(user_id):
+    """Single endpoint that returns all dashboard data in one call"""
+    target_date = request.args.get('date') or str(date.today())
+
+    diary = load_json(DIARY_PATH)
+    totals, entries = get_day_totals(diary, user_id, target_date)
+
+    ex_log = load_json(EXERCISE_PATH)
+    exercise_entries = ex_log.get(user_id, {}).get(target_date, [])
+    burned = sum(e.get('calories_burned', 0) for e in exercise_entries)
+
+    water_data = load_json(WATER_PATH)
+    water_ml = water_data.get(user_id, {}).get(target_date, 0)
+
+    wlog = load_json(WEIGHT_PATH)
+    weight_entries = sorted(wlog.get(user_id, {}).items())
+    latest_weight = weight_entries[-1][1]['weight_kg'] if weight_entries else None
+
+    profiles = load_json(PROFILE_PATH)
+    profile = profiles.get(user_id, {})
+
+    return jsonify({
+        'date': target_date,
+        'nutrition': totals,
+        'meal_count': len(entries),
+        'calories_burned': burned,
+        'net_calories': totals.get('calories', 0) - burned,
+        'water_ml': water_ml,
+        'latest_weight_kg': latest_weight,
+        'profile': {
+            'name': profile.get('name', ''),
+            'targets': profile.get('targets', {}),
+            'goal': profile.get('goal', '')
+        }
+    })
+
 
 # ============ RUN ============
 if __name__ == '__main__':

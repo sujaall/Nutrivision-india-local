@@ -3,863 +3,693 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NutriVision India [LOCAL] — Intelligent Nutrition & Diet Platform</title>
-  
-  <!-- Modern Typography (Outfit + Inter) -->
+  <title>NutriVision India</title>
+  <meta name="description" content="Simple AI-powered Indian food nutrition tracker.">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#f97316">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
-  
-  <!-- Quagga Barcode Engine -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-  
-  <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/static/css/main.css?v=2.3">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/css/main.css?v=2.6">
+  <style>
+/* ── CLEAN REDESIGN ── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#090c14;color:#f0f4f8;font-family:'Inter',sans-serif;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden}
+/* TOP BAR */
+.top-bar{position:sticky;top:0;z-index:100;background:rgba(9,12,20,.95);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.06);padding:14px 20px;display:flex;align-items:center;justify-content:space-between}
+.brand{font-family:'Outfit',sans-serif;font-weight:900;font-size:1.25rem;color:#f97316;cursor:pointer}.brand span{color:#f0f4f8}
+.icon-btn{background:rgba(255,255,255,.06);border:none;border-radius:10px;padding:8px 10px;font-size:1rem;cursor:pointer;transition:background .2s}.icon-btn:hover{background:rgba(255,255,255,.12)}
+.top-actions{display:flex;gap:8px}
+/* CONTENT */
+.tab-content{flex:1;overflow-y:auto;padding-bottom:88px}
+.tab-pane{display:none;padding:18px 16px}
+.tab-pane.active{display:block;animation:fadeUp .25s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+/* BOTTOM NAV */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:200;background:rgba(10,13,22,.97);backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,.07);display:flex;padding:8px 4px calc(8px + env(safe-area-inset-bottom))}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;padding:6px 4px;border-radius:12px;transition:all .2s;color:#64748b}
+.nav-tab.active{color:#f97316}
+.nav-icon{font-size:1.3rem;line-height:1;transition:transform .2s}.nav-tab.active .nav-icon{transform:scale(1.1)}
+.nav-label{font-size:.62rem;font-weight:700;letter-spacing:.02em}
+.nav-dot{width:4px;height:4px;border-radius:50%;background:#f97316;opacity:0;transition:opacity .2s}.nav-tab.active .nav-dot{opacity:1}
+/* CARDS */
+.card{background:#111520;border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:20px;margin-bottom:14px}
+.card-sm{padding:14px 16px;border-radius:14px}
+.card-title{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;margin-bottom:10px}
+/* SECTION */
+.sec-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.sec-title{font-size:.93rem;font-weight:700;color:#f0f4f8}
+.sec-link{font-size:.78rem;color:#f97316;font-weight:600;cursor:pointer;background:none;border:none}
+/* RING */
+.ring-wrap{display:flex;align-items:center;gap:20px}
+.ring-container{position:relative;width:110px;height:110px;flex-shrink:0}
+.ring-container svg{width:110px;height:110px;transform:rotate(-90deg)}
+.ring-track{fill:none;stroke:rgba(255,255,255,.07);stroke-width:9}
+.ring-fill{fill:none;stroke:#f97316;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .8s cubic-bezier(.4,0,.2,1)}
+.ring-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.ring-cal{font-family:'Outfit',sans-serif;font-size:1.4rem;font-weight:900;color:#f0f4f8;line-height:1}
+.ring-lbl{font-size:.58rem;font-weight:700;color:#64748b;letter-spacing:.04em;margin-top:2px}
+.ring-stats{flex:1;display:flex;flex-direction:column;gap:9px}
+.ring-stat{display:flex;justify-content:space-between;align-items:center}
+.rs-label{font-size:.8rem;color:#94a3b8}.rs-val{font-size:.82rem;font-weight:700;color:#f0f4f8}
+/* MACROS */
+.macro-row{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.macro-item{display:flex;flex-direction:column;gap:4px}
+.macro-hdr{display:flex;justify-content:space-between}
+.macro-name{font-size:.78rem;font-weight:600;color:#94a3b8}.macro-val{font-size:.78rem;font-weight:700;color:#f0f4f8}
+.bar-track{height:5px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden}
+.bar-fill{height:100%;border-radius:99px;transition:width .6s}
+/* QUICK ACTIONS */
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.quick-btn{display:flex;align-items:center;gap:10px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);border-radius:14px;padding:14px;cursor:pointer;transition:all .2s;text-align:left}
+.quick-btn:hover{background:rgba(249,115,22,.15);transform:translateY(-1px)}
+.quick-btn.sec{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}
+.quick-btn.sec:hover{background:rgba(255,255,255,.08)}
+.q-icon{font-size:1.4rem;flex-shrink:0}
+.q-title{font-size:.85rem;font-weight:700;color:#f0f4f8}
+.q-sub{font-size:.72rem;color:#64748b;margin-top:1px}
+/* INNER TABS */
+.inner-tabs{display:flex;background:rgba(255,255,255,.04);border-radius:12px;padding:4px;gap:2px;margin-bottom:16px}
+.inner-tab{flex:1;background:none;border:none;border-radius:9px;padding:9px 4px;font-size:.75rem;font-weight:600;color:#64748b;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:4px}
+.inner-tab.active{background:#1e2535;color:#f97316;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.inner-pane{display:none}.inner-pane.active{display:block}
+/* SCAN */
+.scan-zone{aspect-ratio:4/3;background:#0d1017;border:2px dashed rgba(249,115,22,.3);border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.scan-zone:hover{border-color:rgba(249,115,22,.6)}
+.scan-icon{font-size:3rem;opacity:.6}
+.scan-hint{font-size:.86rem;color:#64748b;text-align:center;padding:0 20px}
+#scan-preview-img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;border-radius:16px;display:none}
+/* RESULT CARD */
+.result-card{background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(249,115,22,.03));border:1px solid rgba(249,115,22,.25);border-radius:18px;padding:18px;margin-top:14px}
+.result-name{font-family:'Outfit',sans-serif;font-size:1.3rem;font-weight:800;color:#f0f4f8;margin-bottom:4px}
+.result-badge{display:inline-block;background:rgba(249,115,22,.15);color:#f97316;border-radius:6px;font-size:.68rem;font-weight:700;padding:3px 8px;margin-bottom:14px;letter-spacing:.04em}
+/* MACROS BOX */
+.macros-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.macro-box{background:rgba(255,255,255,.05);border-radius:10px;padding:10px 6px;text-align:center}
+.mv{font-size:1.1rem;font-weight:800}.ml{font-size:.65rem;color:#64748b;margin-top:2px;font-weight:600}
+.mv.cal{color:#f97316}.mv.pro{color:#38bdf8}.mv.car{color:#a78bfa}.mv.fat{color:#fbbf24}
+/* PORTION */
+.portion-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.portion-lbl{font-size:.82rem;color:#94a3b8}.portion-val{font-size:.88rem;font-weight:700;color:#f97316}
+input[type=range]{width:100%;accent-color:#f97316;height:4px;border-radius:99px;cursor:pointer;margin-bottom:12px}
+/* SEARCH */
+.search-wrap{position:relative;margin-bottom:12px}
+.search-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:13px 14px 13px 42px;font-size:.9rem;color:#f0f4f8;font-family:'Inter',sans-serif;outline:none;transition:border-color .2s}
+.search-input:focus{border-color:rgba(249,115,22,.5)}
+.search-icon-abs{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:1rem;color:#64748b;pointer-events:none}
+/* FOOD ROW */
+.food-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer}
+.food-row:last-child{border-bottom:none}
+.food-row-name{font-size:.9rem;font-weight:600;color:#f0f4f8}
+.food-row-cal{font-size:.75rem;color:#64748b;margin-top:2px}
+.food-add-btn{background:rgba(249,115,22,.15);border:none;border-radius:8px;color:#f97316;font-size:1.1rem;font-weight:700;padding:6px 12px;cursor:pointer;transition:background .2s}
+.food-add-btn:hover{background:rgba(249,115,22,.3)}
+/* DIARY */
+.meal-group-lbl{font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;margin-bottom:8px;margin-top:14px;padding-left:2px}
+.meal-item{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:12px;margin-bottom:6px}
+.mi-name{font-size:.88rem;font-weight:600;color:#f0f4f8}
+.mi-sub{font-size:.73rem;color:#64748b;margin-top:1px}
+.mi-cal{font-size:.9rem;font-weight:700;color:#f97316}
+.mi-del{background:none;border:none;color:#475569;cursor:pointer;padding:4px;margin-left:6px}
+/* PILLS */
+.pill-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.pill{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:99px;padding:7px 14px;font-size:.78rem;font-weight:600;color:#94a3b8;cursor:pointer;transition:all .2s;white-space:nowrap}
+.pill.active{background:rgba(249,115,22,.15);border-color:rgba(249,115,22,.3);color:#f97316}
+/* PROGRESS STATS */
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;text-align:center}
+.stat-box{background:rgba(255,255,255,.04);border-radius:12px;padding:14px 8px}
+.stat-num{font-family:'Outfit',sans-serif;font-size:1.55rem;font-weight:900;line-height:1}
+.stat-sub{font-size:.67rem;font-weight:600;color:#64748b;margin-top:3px}
+/* EXERCISE ROW */
+.ex-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.ex-row:last-child{border-bottom:none}
+.ex-name{font-size:.88rem;font-weight:600;color:#f0f4f8}
+.ex-sub{font-size:.72rem;color:#64748b;margin-top:1px}
+.ex-burned{font-size:.88rem;font-weight:700;color:#f59e0b}
+/* MICRO */
+.micro-item{margin-bottom:12px}
+.micro-hdr{display:flex;justify-content:space-between;margin-bottom:4px}
+.micro-name{font-size:.8rem;font-weight:600;color:#94a3b8}
+.micro-val{font-size:.76rem;font-weight:700}
+.micro-track{height:5px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden}
+.micro-fill{height:100%;border-radius:99px;transition:width .5s}
+/* FAV */
+.fav-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.fav-item:last-child{border-bottom:none}
+.fav-name{font-size:.9rem;font-weight:600;color:#f0f4f8}
+.fav-meta{font-size:.73rem;color:#64748b;margin-top:2px}
+/* RECIPE */
+.recipe-item{padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.recipe-item:last-child{border-bottom:none}
+.recipe-name{font-size:.9rem;font-weight:700;color:#f0f4f8}
+.recipe-meta{font-size:.75rem;color:#64748b;margin-top:2px}
+/* PLAN */
+.plan-day{background:#111520;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px;margin-bottom:10px}
+.plan-meal{padding:8px;background:rgba(255,255,255,.03);border-radius:10px;margin-bottom:6px}
+.plan-meal-name{font-size:.78rem;font-weight:700;color:#f97316;margin-bottom:3px}
+.plan-meal-items{font-size:.8rem;color:#94a3b8;line-height:1.4}
+/* CHAT */
+.chat-wrap{display:flex;flex-direction:column;min-height:180px;margin-bottom:12px;gap:2px}
+.chat-bubble{max-width:85%;padding:11px 14px;border-radius:16px;font-size:.86rem;line-height:1.55}
+.chat-bubble.bot{background:#1a1f2e;color:#e2e8f0;border-bottom-left-radius:4px;align-self:flex-start}
+.chat-bubble.user{background:#f97316;color:#fff;border-bottom-right-radius:4px;align-self:flex-end}
+/* WATER */
+.water-cups{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.water-cup{width:36px;height:36px;border-radius:8px;background:rgba(14,165,233,.1);border:1.5px solid rgba(14,165,233,.2);display:flex;align-items:center;justify-content:center;font-size:1rem;cursor:pointer;transition:all .15s}
+.water-cup.filled{background:rgba(14,165,233,.25);border-color:rgba(14,165,233,.5)}
+/* FORM */
+.field-label{display:block;font-size:.76rem;font-weight:600;color:#64748b;margin-bottom:5px;letter-spacing:.03em}
+.field-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px 14px;font-size:.9rem;color:#f0f4f8;font-family:'Inter',sans-serif;outline:none;transition:border-color .2s}
+.field-input:focus{border-color:rgba(249,115,22,.5)}
+select.field-input{cursor:pointer}
+.form-row{margin-bottom:13px}
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:12px;font-size:.88rem;font-weight:700;font-family:'Inter',sans-serif;cursor:pointer;transition:all .2s;border:none;padding:13px 18px}
+.btn-primary{background:#f97316;color:#0a0d16}.btn-primary:hover{background:#ea580c}
+.btn-secondary{background:rgba(255,255,255,.07);color:#f0f4f8;border:1px solid rgba(255,255,255,.1)}.btn-secondary:hover{background:rgba(255,255,255,.12)}
+.btn-block{width:100%}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+/* TOAST */
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:#1e2535;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:10px 18px;font-size:.84rem;font-weight:600;color:#f0f4f8;z-index:999;opacity:0;transition:all .3s;pointer-events:none;max-width:calc(100vw - 40px);text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.success{border-color:rgba(16,185,129,.4);color:#6ee7b7}
+.toast.error{border-color:rgba(239,68,68,.4);color:#fca5a5}
+/* MODAL */
+.modal-bg{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:none;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-sheet{background:#111520;border:1px solid rgba(255,255,255,.08);border-radius:24px 24px 0 0;padding:24px 20px calc(28px + env(safe-area-inset-bottom));width:100%;max-width:520px;max-height:92vh;overflow-y:auto}
+.modal-handle{width:36px;height:4px;background:rgba(255,255,255,.15);border-radius:99px;margin:0 auto 18px}
+.modal-title{font-family:'Outfit',sans-serif;font-size:1.1rem;font-weight:800;color:#f0f4f8;margin-bottom:16px}
+.modal-close{float:right;background:none;border:none;color:#64748b;font-size:1.1rem;cursor:pointer;padding:4px}
+/* EMPTY */
+.empty{text-align:center;padding:32px 16px;color:#64748b}
+.empty-icon{font-size:2.2rem;margin-bottom:8px;opacity:.5}
+.empty-text{font-size:.86rem;line-height:1.5}
+/* SPINNER */
+.spinner{width:28px;height:28px;margin:0 auto;border:3px solid rgba(249,115,22,.2);border-top-color:#f97316;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{text-align:center;padding:28px}
+/* INSIGHT */
+.insight{background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(249,115,22,.05));border:1px solid rgba(99,102,241,.2);border-radius:16px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.insight-icon{font-size:1.3rem;flex-shrink:0}
+.insight-text{font-size:.84rem;color:#cbd5e1;line-height:1.5}
+/* GI ROW */
+.gi-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.82rem}
+.gi-row:last-child{border-bottom:none}
+/* PROFILE SUMMARY */
+.me-targets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-top:14px}
+.me-target-box{background:rgba(255,255,255,.04);border-radius:10px;padding:10px}
+.me-num{font-size:1rem;font-weight:800}
+.me-lbl{font-size:.63rem;color:#64748b;margin-top:2px}
+::-webkit-scrollbar{width:0}
+/* AI RESULT BADGES */
+.ai-badge{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:4px 10px;font-size:.7rem;font-weight:700;letter-spacing:.03em;white-space:nowrap}
+.ai-badge-gemini{background:rgba(139,92,246,.18);border:1px solid rgba(139,92,246,.4);color:#c4b5fd}
+.ai-badge-verified{background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.35);color:#6ee7b7}
+.ai-badge-pytorch{background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.3);color:#7dd3fc}
+.ai-badge-conf{background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.3);color:#fdba74}
+/* ENSEMBLE CHIPS */
+.ensemble-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:5px 10px;font-size:.72rem;font-weight:700;color:#94a3b8;white-space:nowrap;cursor:default}
+.ensemble-chip.top{background:rgba(249,115,22,.1);border-color:rgba(249,115,22,.25);color:#fb923c}
+@keyframes laser-scan{0%{top:25%}50%{top:75%}100%{top:25%}}
+  </style>
 </head>
 <body>
 
-  <!-- GLOBAL APP HEADER -->
-  <header class="app-header">
-    <div class="header-container">
-      <div class="brand-wrapper" onclick="showScreen('home')">
-        <div class="brand-symbol">🍛</div>
-        <div class="brand-title">
-          NutriVision
-          <span class="brand-tag">India</span>
-          <span class="local-dev-pill">LOCAL</span>
-        </div>
-      </div>
-
-      <!-- Desktop Navigation Bar -->
-      <nav class="desktop-nav">
-        <button type="button" class="nav-link-btn active" data-screen="home" onclick="showScreen('home')">
-          <span class="nav-icon">🏠</span> <span>Home</span>
-        </button>
-        <button type="button" class="nav-link-btn" data-screen="foodlog" onclick="showScreen('foodlog')">
-          <span class="nav-icon">🍽️</span> <span>Food Log</span>
-        </button>
-        <button type="button" class="nav-link-btn" data-screen="history" onclick="showScreen('history')">
-          <span class="nav-icon">📔</span> <span>History</span>
-        </button>
-        <button type="button" class="nav-link-btn" data-screen="coach" onclick="showScreen('coach')">
-          <span class="nav-icon">🤖</span> <span>NutriCoach</span>
-        </button>
-        <button type="button" class="nav-link-btn" data-screen="profile" onclick="showScreen('profile')">
-          <span class="nav-icon">👤</span> <span>Profile</span>
-        </button>
-      </nav>
-    </div>
-  </header>
-
-  <!-- TOAST NOTIFICATION CONTAINER -->
-  <div class="toast-notification" id="app-toast"></div>
-
-  <!-- MAIN APP CONTAINER -->
-  <div class="app-container">
-
-    <!-- ==========================================================================
-         SCREEN 1: HOME / DASHBOARD
-         ========================================================================== -->
-    <main class="screen-view active" id="screen-home">
-      <!-- HERO VALUE PROPOSITION -->
-      <section class="hero-banner">
-        <div class="hero-content">
-          <div class="hero-pill">✨ Intelligent Indian Food Nutrition</div>
-          <h1 class="hero-headline">Know what you eat.</h1>
-          <p class="hero-description">
-            Identify authentic Indian meals, track calories, monitor protein goals, and scan packaged items with deep learning precision.
-          </p>
-          <div class="hero-cta-group">
-            <button type="button" class="btn btn-primary" onclick="showScreen('foodlog'); setFoodLogTab('scan')">
-              <span>📸</span> <span>Scan Your Food</span>
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="showScreen('foodlog'); setFoodLogTab('search')">
-              <span>🔍</span> <span>Search Foods</span>
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="showScreen('foodlog'); setFoodLogTab('barcode')">
-              <span>📦</span> <span>Scan Barcode</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- FIRST-TIME SETUP BANNER (shown when no profile) -->
-      <div id="hero-profile-cta" style="display:none;">
-        <div class="surface-card" style="text-align:center;padding:36px 20px;">
-          <h3 style="font-size:1.2rem;margin-bottom:6px;">Personalize Your Nutrition Goals</h3>
-          <p style="font-size:0.88rem;margin-bottom:20px;">Set up your height, weight, and fitness goal to calculate exact calories and macros.</p>
-          <button type="button" class="btn btn-primary" onclick="showScreen('profile')">Setup My Profile 👤</button>
-        </div>
-      </div>
-
-      <!-- ACTIVE NUTRITION DASHBOARD -->
-      <div id="dash-active-summary">
-        <!-- Shortcuts Grid -->
-        <div class="shortcuts-grid">
-          <div class="shortcut-card" onclick="showScreen('foodlog'); setFoodLogTab('scan')">
-            <span class="shortcut-icon">📸</span>
-            <span class="shortcut-title">AI Food Scan</span>
-          </div>
-          <div class="shortcut-card" onclick="showScreen('foodlog'); setFoodLogTab('barcode')">
-            <span class="shortcut-icon">📦</span>
-            <span class="shortcut-title">Barcode Scan</span>
-          </div>
-          <div class="shortcut-card" onclick="showScreen('foodlog'); setFoodLogTab('search')">
-            <span class="shortcut-icon">🔍</span>
-            <span class="shortcut-title">Food Search</span>
-          </div>
-          <div class="shortcut-card" onclick="showScreen('coach')">
-            <span class="shortcut-icon">🤖</span>
-            <span class="shortcut-title">NutriCoach AI</span>
-          </div>
-        </div>
-
-        <div class="dashboard-grid">
-          <!-- CALORIE GAUGE CARD -->
-          <div class="surface-card">
-            <div class="card-header">
-              <div class="card-title-group">
-                <div class="section-eyebrow">Daily Budget</div>
-                <div class="card-title" id="dash-greeting-text">Daily Intake</div>
-              </div>
-              <span class="brand-tag" id="dash-plan-badge">Fat Loss 🔥</span>
-            </div>
-
-            <div class="calorie-overview-card">
-              <div class="calorie-gauge-wrapper">
-                <svg class="calorie-gauge-svg" viewBox="0 0 150 150">
-                  <circle class="gauge-track" cx="75" cy="75" r="66"></circle>
-                  <circle class="gauge-value-ring" id="dash-gauge-fill" cx="75" cy="75" r="66"></circle>
-                </svg>
-                <div class="gauge-center-content">
-                  <div class="gauge-calories-number" id="dash-cal-remaining">—</div>
-                  <div class="gauge-label">kcal left</div>
-                </div>
-              </div>
-
-              <div class="calorie-stats-column">
-                <div class="stat-item-row">
-                  <span class="stat-item-label">Eaten</span>
-                  <span class="stat-item-val" id="dash-cal-eaten">0 kcal</span>
-                </div>
-                <div class="stat-item-row">
-                  <span class="stat-item-label">Daily Target</span>
-                  <span class="stat-item-val" id="dash-cal-target">—</span>
-                </div>
-                <div class="stat-item-row">
-                  <span class="stat-item-label">Date</span>
-                  <span class="stat-item-val" id="dash-date-display">—</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- MACRO METERS CARD -->
-          <div class="surface-card">
-            <div class="card-header">
-              <div class="card-title-group">
-                <div class="section-eyebrow">Macronutrients</div>
-                <div class="card-title">Nutritional Balance</div>
-              </div>
-            </div>
-
-            <div class="macro-meters-stack">
-              <!-- Protein -->
-              <div class="macro-meter-row">
-                <div class="macro-meter-top">
-                  <span class="macro-name-tag" style="color:var(--color-protein);">💪 Protein</span>
-                  <span class="macro-values" id="dash-pro-nums">0 / 0g</span>
-                </div>
-                <div class="meter-track">
-                  <div class="meter-bar-fill fill-protein" id="dash-pro-fill" style="width:0%"></div>
-                </div>
-              </div>
-
-              <!-- Carbs -->
-              <div class="macro-meter-row">
-                <div class="macro-meter-top">
-                  <span class="macro-name-tag" style="color:var(--color-carbs);">⚡ Carbs</span>
-                  <span class="macro-values" id="dash-car-nums">0 / 0g</span>
-                </div>
-                <div class="meter-track">
-                  <div class="meter-bar-fill fill-carbs" id="dash-car-fill" style="width:0%"></div>
-                </div>
-              </div>
-
-              <!-- Fat -->
-              <div class="macro-meter-row">
-                <div class="macro-meter-top">
-                  <span class="macro-name-tag" style="color:var(--color-fat);">🥑 Healthy Fats</span>
-                  <span class="macro-values" id="dash-fat-nums">0 / 0g</span>
-                </div>
-                <div class="meter-track">
-                  <div class="meter-bar-fill fill-fat" id="dash-fat-fill" style="width:0%"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- HYDRATION STRIP CARD -->
-        <div class="surface-card">
-          <div class="hydration-strip">
-            <div class="hydration-info">
-              <div class="hydration-icon-circle">💧</div>
-              <div>
-                <div style="font-weight:700;font-size:0.95rem;">Water Hydration</div>
-                <div style="font-size:0.8rem;color:var(--text-secondary);" id="water-count-display">0 / 3000 ml</div>
-              </div>
-            </div>
-            <div class="hydration-controls">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="addWater(250)">+250 ml (Glass)</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="addWater(500)">+500 ml (Bottle)</button>
-              <button type="button" class="btn btn-subtle btn-sm" onclick="resetWater()" style="color:var(--color-danger);">Reset</button>
-            </div>
-          </div>
-          <div class="meter-track" style="margin-top:14px;">
-            <div class="meter-bar-fill" id="water-gauge-fill" style="background:var(--color-water);width:0%;"></div>
-          </div>
-        </div>
-
-        <!-- STATUS FEEDBACK BANNER -->
-        <div class="surface-card" id="dash-status-box" style="background:var(--bg-surface-subtle);">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div style="font-size:1.6rem;">⚖️</div>
-            <div>
-              <div style="font-weight:700;font-size:0.95rem;" id="dash-status-title">On Track: Balanced intake</div>
-              <div style="font-size:0.82rem;color:var(--text-secondary);" id="dash-status-desc">Log your meals to see live deficit or surplus calculations.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- ==========================================================================
-         SCREEN 2: UNIFIED FOOD LOG (AI Scan + Search + Barcode)
-         ========================================================================== -->
-    <main class="screen-view" id="screen-foodlog">
-
-      <!-- Food Log Page Header -->
-      <div class="foodlog-header">
-        <div class="section-eyebrow">Add to Your Diary</div>
-        <h2 class="foodlog-title">🍽️ Food Log</h2>
-        <p class="foodlog-subtitle">Choose how you want to log your food below</p>
-      </div>
-
-      <!-- Method Tabs -->
-      <div class="foodlog-tabs" id="foodlog-tabs">
-        <button type="button" class="foodlog-tab-btn active" id="tab-btn-scan" onclick="setFoodLogTab('scan')">
-          <span class="foodlog-tab-icon">📸</span>
-          <span class="foodlog-tab-label">AI Scan</span>
-          <span class="foodlog-tab-desc">Photo your meal</span>
-        </button>
-        <button type="button" class="foodlog-tab-btn" id="tab-btn-search" onclick="setFoodLogTab('search')">
-          <span class="foodlog-tab-icon">🔍</span>
-          <span class="foodlog-tab-label">Food Search</span>
-          <span class="foodlog-tab-desc">Type & find food</span>
-        </button>
-        <button type="button" class="foodlog-tab-btn" id="tab-btn-barcode" onclick="setFoodLogTab('barcode')">
-          <span class="foodlog-tab-icon">📦</span>
-          <span class="foodlog-tab-label">Barcode</span>
-          <span class="foodlog-tab-desc">Scan packed food</span>
-        </button>
-      </div>
-
-      <!-- ── TAB 1: AI FOOD SCAN ── -->
-      <div class="foodlog-panel" id="foodlog-panel-scan">
-        <div class="foodlog-method-hint">
-          <span class="hint-icon">📸</span>
-          <div>
-            <div class="hint-title">Scan your cooked meal or dish</div>
-            <div class="hint-desc">Take a photo or upload an image — our AI will identify the food and show nutrition facts instantly.</div>
-          </div>
-        </div>
-
-        <div class="scanner-container">
-          <!-- Live Camera Stream -->
-          <div class="live-camera-wrapper" id="live-camera-wrapper">
-            <video class="camera-video-feed" id="live-camera-video" autoplay playsinline muted></video>
-            <div class="camera-overlay-controls">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="switchCameraFacing()">🔄 Flip</button>
-              <button type="button" class="shutter-btn" onclick="captureCameraSnapshot()" title="Capture Plate"></button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="stopLiveCamera()">✕ Close</button>
-            </div>
-          </div>
-
-          <!-- Drag & Drop Upload Zone -->
-          <div class="dropzone-box" id="scanner-dropzone" onclick="document.getElementById('food-file-input').click()">
-            <div class="dropzone-icon">📸</div>
-            <h2 class="dropzone-title">Take a photo of your food</h2>
-            <p class="dropzone-hint">Our AI will recognize the dish and show you calories, protein, carbs &amp; fat.</p>
-            <div style="display:flex;justify-content:center;gap:10px;">
-              <button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation(); startLiveCamera();">📷 Use Camera</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); document.getElementById('food-file-input').click();">📁 Upload Photo</button>
-            </div>
-          </div>
-
-          <input type="file" id="food-file-input" accept="image/*" style="display:none;" onchange="handleFileInput(event)">
-
-          <!-- Analyzing / Loading Feedback Card -->
-          <div class="surface-card analyzing-box" id="scanner-analyzing-card">
-            <div class="analyzing-scanline"></div>
-            <div class="analyzing-spinner"></div>
-            <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:4px;">Analyzing your meal…</h3>
-            <p style="font-size:0.85rem;color:var(--text-secondary);">Ensemble model evaluating Indian food vision features.</p>
-          </div>
-
-          <!-- Prediction & Nutrition Result Card -->
-          <div class="surface-card" id="scanner-result-card" style="display:none;">
-            <div class="result-header">
-              <img src="" id="result-image-element" class="result-image-preview" alt="Food plate preview">
-              <div class="result-meta-column">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                  <span class="confidence-badge" id="result-confidence-badge">High Confidence: 92%</span>
-                  <span class="ai-verified-badge" id="ai-verified-badge" style="display:none;">✦ AI Verified</span>
-                  <div id="ai-source-badge" style="display:inline-flex;"></div>
-                </div>
-                <h2 class="result-food-name" id="result-dish-title">—</h2>
-                <p id="gemini-desc" style="display:none;color:#94a3b8;font-size:0.82rem;font-style:italic;margin-top:6px;line-height:1.4;"></p>
-                <!-- AI portion estimate row -->
-                <div id="ai-portion-estimate-row" style="display:none;margin-top:4px;">
-                  <span style="font-size:0.78rem;color:var(--accent-primary);font-weight:600;">⚡ Visual estimate: <span id="ai-portion-estimate-val">~200g</span> serving</span>
-                </div>
-                <!-- AI insight note -->
-                <div id="ai-insight-note" style="display:none;margin-top:6px;font-size:0.78rem;color:var(--text-secondary);font-style:italic;line-height:1.4;"></div>
-                <div id="result-diet-notes"></div>
-              </div>
-            </div>
-
-            <!-- Alternative Predictions Switcher -->
-            <div class="alternate-predictions-box">
-              <div class="section-eyebrow">Other Likely Matches</div>
-              <div class="alt-chips-container" id="alt-predictions-container"></div>
-            </div>
-
-            <!-- Macro Metric 4-Grid -->
-            <div class="macro-metric-grid">
-              <div class="macro-metric-box">
-                <div class="macro-metric-val cal" id="metric-val-cal">0</div>
-                <div class="macro-metric-lbl">Calories</div>
-              </div>
-              <div class="macro-metric-box">
-                <div class="macro-metric-val pro" id="metric-val-pro">0g</div>
-                <div class="macro-metric-lbl">Protein</div>
-              </div>
-              <div class="macro-metric-box">
-                <div class="macro-metric-val car" id="metric-val-car">0g</div>
-                <div class="macro-metric-lbl">Carbs</div>
-              </div>
-              <div class="macro-metric-box">
-                <div class="macro-metric-val fat" id="metric-val-fat">0g</div>
-                <div class="macro-metric-lbl">Fat</div>
-              </div>
-            </div>
-
-            <!-- Indian Portion Presets -->
-            <div class="portion-selector-card">
-              <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span class="field-label" style="margin:0;">Serving Portion</span>
-                <span id="portion-display-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
-              </div>
-
-              <div class="presets-grid">
-                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(50, this)">🖐️ Small Snack (50g)</button>
-                <button type="button" class="preset-chip-btn active" onclick="setPortionPreset(100, this)">🥣 Small Katori (100g)</button>
-                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(125, this)">🍽️ Half Plate (125g)</button>
-                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(150, this)">🥣 Medium Katori (150g)</button>
-                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(250, this)">🍽️ Full Plate (250g)</button>
-                <button type="button" class="preset-chip-btn" onclick="setPortionPreset(350, this)">🍱 Large Thali (350g)</button>
-              </div>
-
-              <input type="range" id="portion-slider-input" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);" oninput="updatePortionMetrics(this.value)">
-            </div>
-
-            <!-- Meal Type Selection -->
-            <div class="section-eyebrow">Meal Classification</div>
-            <div class="meal-type-tabs" id="scanner-meal-tabs">
-              <button type="button" class="meal-type-pill active" data-meal="breakfast" onclick="setMealType('breakfast', this)">
-                <span class="meal-check-indicator">✓</span> <span>🌅 Breakfast</span>
-              </button>
-              <button type="button" class="meal-type-pill" data-meal="lunch" onclick="setMealType('lunch', this)">
-                <span class="meal-check-indicator">✓</span> <span>☀️ Lunch</span>
-              </button>
-              <button type="button" class="meal-type-pill" data-meal="dinner" onclick="setMealType('dinner', this)">
-                <span class="meal-check-indicator">✓</span> <span>🌙 Dinner</span>
-              </button>
-              <button type="button" class="meal-type-pill" data-meal="snack" onclick="setMealType('snack', this)">
-                <span class="meal-check-indicator">✓</span> <span>🍎 Snack</span>
-              </button>
-            </div>
-
-            <button type="button" class="btn btn-primary btn-block" onclick="logScannedMealToDiary()">
-              <span>✅</span> <span>Add to Daily History</span>
-            </button>
-            <button type="button" class="btn btn-secondary btn-block" onclick="resetScanner()" style="margin-top:10px;">
-              <span>📸</span> <span>Scan Another Meal</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── TAB 2: FOOD SEARCH ── -->
-      <div class="foodlog-panel" id="foodlog-panel-search" style="display:none;">
-        <div class="foodlog-method-hint">
-          <span class="hint-icon">🔍</span>
-          <div>
-            <div class="hint-title">Search from our Indian food database</div>
-            <div class="hint-desc">Type the name of any Indian dish, ingredient, or snack. Select it to log calories and macros to your diary.</div>
-          </div>
-        </div>
-
-        <div class="surface-card">
-          <div class="search-bar-wrapper">
-            <span class="search-leading-icon">🔍</span>
-            <input type="text" class="field-input search-input-field" id="search-text-input" placeholder="Search dish (e.g. biryani, dal tadka, paneer, poha, dosa)..." oninput="onSearchInputChange(this.value)">
-            <button type="button" class="search-clear-btn" onclick="clearSearchField()">✕</button>
-          </div>
-
-          <!-- Category Filters -->
-          <div class="category-filter-strip">
-            <button type="button" class="cat-filter-btn active" onclick="filterSearchCategory('all', this)">All Items</button>
-            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('high_protein', this)">🥩 High Protein</button>
-            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('breakfast', this)">🥞 Breakfast</button>
-            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('curry', this)">🍲 Curries &amp; Dals</button>
-            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('rice', this)">🍚 Rice &amp; Biryani</button>
-            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('snacks', this)">🥟 Snacks</button>
-            <button type="button" class="cat-filter-btn" onclick="filterSearchCategory('dairy', this)">🥛 Dairy</button>
-          </div>
-
-          <div class="search-results-container" id="search-results-list"></div>
-        </div>
-
-        <!-- Manual Item Portion Calculator Card -->
-        <div class="surface-card" id="manual-portion-card" style="display:none;">
-          <div class="card-header">
-            <h3 id="manual-dish-name" style="font-size:1.3rem;font-weight:700;">—</h3>
-          </div>
-
-          <div class="macro-metric-grid">
-            <div class="macro-metric-box">
-              <div class="macro-metric-val cal" id="m-val-cal">0</div>
-              <div class="macro-metric-lbl">Calories</div>
-            </div>
-            <div class="macro-metric-box">
-              <div class="macro-metric-val pro" id="m-val-pro">0g</div>
-              <div class="macro-metric-lbl">Protein</div>
-            </div>
-            <div class="macro-metric-box">
-              <div class="macro-metric-val car" id="m-val-car">0g</div>
-              <div class="macro-metric-lbl">Carbs</div>
-            </div>
-            <div class="macro-metric-box">
-              <div class="macro-metric-val fat" id="m-val-fat">0g</div>
-              <div class="macro-metric-lbl">Fat</div>
-            </div>
-          </div>
-
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span class="field-label" style="margin:0;">Custom Serving</span>
-            <span id="manual-serving-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
-          </div>
-          <input type="range" id="manual-grams-slider" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);margin-bottom:16px;" oninput="updateManualServing(this.value)">
-
-          <div class="section-eyebrow">Select Meal</div>
-          <div class="meal-type-tabs" id="manual-meal-tabs">
-            <button type="button" class="meal-type-pill active" data-meal="breakfast" onclick="setMealType('breakfast', this)">
-              <span class="meal-check-indicator">✓</span> <span>🌅 Breakfast</span>
-            </button>
-            <button type="button" class="meal-type-pill" data-meal="lunch" onclick="setMealType('lunch', this)">
-              <span class="meal-check-indicator">✓</span> <span>☀️ Lunch</span>
-            </button>
-            <button type="button" class="meal-type-pill" data-meal="dinner" onclick="setMealType('dinner', this)">
-              <span class="meal-check-indicator">✓</span> <span>🌙 Dinner</span>
-            </button>
-            <button type="button" class="meal-type-pill" data-meal="snack" onclick="setMealType('snack', this)">
-              <span class="meal-check-indicator">✓</span> <span>🍎 Snack</span>
-            </button>
-          </div>
-
-          <button type="button" class="btn btn-primary btn-block" onclick="logManualSearchMeal()">
-            <span>✅</span> <span>Add to History</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- ── TAB 3: BARCODE SCANNER ── -->
-      <div class="foodlog-panel" id="foodlog-panel-barcode" style="display:none;">
-        <div class="foodlog-method-hint">
-          <span class="hint-icon">📦</span>
-          <div>
-            <div class="hint-title">Scan your packed food's barcode</div>
-            <div class="hint-desc">Point your camera at the barcode on any packaged product — Amul, Maggi, Lay's, Britannia, and more. Works with Indian FMCG brands.</div>
-          </div>
-        </div>
-
-        <div class="surface-card">
-          <div id="barcode-inline-viewport" style="width:100%;height:240px;position:relative;border-radius:var(--radius-md);overflow:hidden;background:#000;border:1px solid var(--border-subtle);margin-bottom:16px;"></div>
-
-          <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px;flex-wrap:wrap;">
-            <button type="button" class="btn btn-primary btn-sm" onclick="startInlineBarcodeScanner()">📷 Start Camera</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTorchlight()">🔦 Flashlight</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('barcode-photo-input').click()">🖼️ Upload Photo</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('package-ocr-input').click()">🏷️ Package OCR</button>
-          </div>
-
-          <input type="file" id="barcode-photo-input" accept="image/*" style="display:none;" onchange="handlePackageImageUpload(event)">
-          <input type="file" id="package-ocr-input" accept="image/*" style="display:none;" onchange="handlePackageImageUpload(event)">
-
-          <div class="barcode-manual-row">
-            <span style="font-size:0.82rem;color:var(--text-secondary);">Or enter barcode number manually:</span>
-            <div style="display:flex;gap:8px;margin-top:8px;">
-              <input type="text" class="field-input" id="manual-barcode-digits" placeholder="e.g. 8901030855480" style="font-family:var(--font-mono);font-size:0.85rem;" onkeydown="if(event.key==='Enter') lookupManualBarcodeString()">
-              <button type="button" class="btn btn-primary btn-sm" onclick="lookupManualBarcodeString()">Lookup</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Barcode Result (inline, no modal) -->
-        <div class="surface-card" id="barcode-inline-result" style="display:none;">
-          <div class="section-eyebrow" id="bc-brand-badge-inline">PACKAGED PRODUCT</div>
-          <h3 id="bc-item-name-inline" style="font-size:1.2rem;font-weight:700;margin-bottom:14px;">—</h3>
-
-          <div class="macro-metric-grid">
-            <div class="macro-metric-box"><div class="macro-metric-val cal" id="bc-val-cal-inline">0</div><div class="macro-metric-lbl">Cal</div></div>
-            <div class="macro-metric-box"><div class="macro-metric-val pro" id="bc-val-pro-inline">0g</div><div class="macro-metric-lbl">Pro</div></div>
-            <div class="macro-metric-box"><div class="macro-metric-val car" id="bc-val-car-inline">0g</div><div class="macro-metric-lbl">Carb</div></div>
-            <div class="macro-metric-box"><div class="macro-metric-val fat" id="bc-val-fat-inline">0g</div><div class="macro-metric-lbl">Fat</div></div>
-          </div>
-
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span class="field-label" style="margin:0;">Portion (g / ml)</span>
-            <span id="bc-serving-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
-          </div>
-          <input type="range" id="bc-serving-slider" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);margin-bottom:16px;" oninput="updateBarcodeServing(this.value)">
-
-          <button type="button" class="btn btn-primary btn-block" onclick="logBarcodeItemToDiary()">
-            <span>✅</span> <span>Add to Daily History</span>
-          </button>
-        </div>
-      </div>
-
-    </main>
-
-    <!-- ==========================================================================
-         SCREEN 4: HISTORY / DIARY TIMELINE
-         ========================================================================== -->
-    <main class="screen-view" id="screen-history">
-      <div class="timeline-header-nav">
-        <button type="button" class="btn btn-subtle btn-sm" onclick="navigateHistoryDate(-1)">◀ Yesterday</button>
-        <div class="date-nav-title" id="history-date-title">Today</div>
-        <button type="button" class="btn btn-subtle btn-sm" onclick="navigateHistoryDate(1)">Tomorrow ▶</button>
-      </div>
-
-      <!-- DAILY MACRO TOTALS -->
-      <div class="surface-card" style="padding:16px 20px;">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">
-          <div>
-            <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--accent-primary);" id="hist-cal-total">0</div>
-            <div style="font-size:0.68rem;color:var(--text-tertiary);text-transform:uppercase;">Calories</div>
-          </div>
-          <div>
-            <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--color-protein);" id="hist-pro-total">0g</div>
-            <div style="font-size:0.68rem;color:var(--text-tertiary);text-transform:uppercase;">Protein</div>
-          </div>
-          <div>
-            <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--color-carbs);" id="hist-car-total">0g</div>
-            <div style="font-size:0.68rem;color:var(--text-tertiary);text-transform:uppercase;">Carbs</div>
-          </div>
-          <div>
-            <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--color-fat);" id="hist-fat-total">0g</div>
-            <div style="font-size:0.68rem;color:var(--text-tertiary);text-transform:uppercase;">Fat</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- MEAL GROUPS -->
-      <div id="history-timeline-container"></div>
-
-      <div style="display:flex;gap:10px;margin-top:16px;">
-        <button type="button" class="btn btn-primary" onclick="showScreen('foodlog'); setFoodLogTab('scan')">📸 Log More Food</button>
-        <button type="button" class="btn btn-secondary" onclick="copyHistorySummary()">📋 Copy Summary</button>
-      </div>
-    </main>
-
-    <!-- ==========================================================================
-         SCREEN 5: NUTRI-COACH AI (GEMINI)
-         ========================================================================== -->
-    <main class="screen-view" id="screen-coach">
-      <div class="surface-card" style="padding:14px 18px;margin-bottom:14px;">
-        <div class="card-header" style="margin:0;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:38px;height:38px;border-radius:var(--radius-sm);background:linear-gradient(135deg,#f97316,#ef4444);display:flex;align-items:center;justify-content:center;font-size:1.25rem;">🤖</div>
-            <div>
-              <div style="font-weight:700;font-size:0.95rem;">NutriCoach AI</div>
-              <div style="font-size:0.75rem;color:var(--text-secondary);" id="key-status-label">Gemini AI Model Ready</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="openGeminiModal()" id="key-btn-text">⚙️ API Key</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="clearCoachConversation()">🗑️</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="coach-interface-card">
-        <!-- Live Nutrition Context Strip -->
-        <div class="coach-context-strip">
-          <div><span style="color:var(--text-tertiary);">PLAN</span><br><b id="c-ctx-goal" style="color:var(--accent-primary);">Fat Loss</b></div>
-          <div><span style="color:var(--text-tertiary);">CAL LEFT</span><br><b id="c-ctx-cal" style="color:var(--text-primary);">—</b></div>
-          <div><span style="color:var(--text-tertiary);">PROTEIN LEFT</span><br><b id="c-ctx-pro" style="color:var(--color-protein);">—</b></div>
-          <div><span style="color:var(--text-tertiary);">MODE</span><br><b style="color:var(--color-success);">Indian Diet</b></div>
-        </div>
-
-        <!-- Chat Stream -->
-        <div class="coach-chat-stream" id="coach-chat-stream"></div>
-
-        <!-- Prompt Suggestions -->
-        <div class="quick-prompt-bar">
-          <button type="button" class="prompt-chip-btn" onclick="sendPromptChip('🍽️ Suggest a high-protein Indian dinner within my remaining calories')">🍽️ High-Protein Dinner</button>
-          <button type="button" class="prompt-chip-btn" onclick="sendPromptChip('🔥 How can I hit my protein goal today with vegetarian Indian food?')">🔥 Hit Protein Goal</button>
-          <button type="button" class="prompt-chip-btn" onclick="sendPromptChip('🥗 Suggest 3 healthy Indian evening snacks under 150 calories')">🥗 Low-Cal Snacks</button>
-          <button type="button" class="prompt-chip-btn" onclick="sendPromptChip('📊 Analyze my meals today and give me feedback')">📊 Review Meals</button>
-        </div>
-
-        <!-- Input Bar -->
-        <div class="chat-input-row">
-          <button type="button" class="btn btn-subtle btn-sm" id="coach-voice-btn" onclick="startVoiceMic()" title="Voice Input" style="font-size:1.1rem;padding:6px 10px;">🎙️</button>
-          <input type="text" class="field-input" id="coach-query-input" placeholder="Ask NutriCoach about food, macros, recipes..." onkeydown="handleCoachInputKey(event)">
-          <button type="button" class="btn btn-primary btn-sm" id="coach-send-btn" onclick="sendCoachChat()" style="padding:10px 16px;">Send</button>
-        </div>
-      </div>
-    </main>
-
-    <!-- ==========================================================================
-         SCREEN 6: PROFILE & GOALS
-         ========================================================================== -->
-    <main class="screen-view" id="screen-profile">
-      <div class="surface-card">
-        <div class="card-header">
-          <div class="card-title-group">
-            <div class="section-eyebrow">Personalized Physiology</div>
-            <div class="card-title">Your Profile & Metabolism</div>
-          </div>
-          <button type="button" class="btn btn-danger btn-sm" onclick="resetProfile()">Reset</button>
-        </div>
-
-        <div class="field-grid-2">
-          <div class="form-field">
-            <label class="field-label">Your Name</label>
-            <input type="text" class="field-input" id="p-name" placeholder="Your name">
-          </div>
-          <div class="form-field">
-            <label class="field-label">Age (years)</label>
-            <input type="number" class="field-input" id="p-age" placeholder="Age">
-          </div>
-        </div>
-
-        <div class="field-grid-2">
-          <div class="form-field">
-            <label class="field-label">Current Weight (kg)</label>
-            <input type="number" class="field-input" id="p-weight" placeholder="kg">
-          </div>
-          <div class="form-field">
-            <label class="field-label">Height (cm)</label>
-            <input type="number" class="field-input" id="p-height" placeholder="cm">
-          </div>
-        </div>
-
-        <div class="form-field">
-          <label class="field-label">Biological Gender</label>
-          <select class="field-select" id="p-gender">
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-          </select>
-        </div>
-
-        <!-- GOAL SELECTION -->
-        <div class="section-eyebrow" style="margin-top:18px;">Primary Fitness Goal</div>
-        <div class="presets-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
-          <div class="preset-chip-btn goal-option-card active" data-goal="fat_loss" onclick="selectGoal('fat_loss')" style="padding:14px 8px;text-align:center;">
-            <div style="font-size:1.4rem;margin-bottom:4px;">🔥</div>
-            <div style="font-weight:700;font-size:0.85rem;">Fat Loss</div>
-            <div style="font-size:0.7rem;color:var(--text-tertiary);">-500 kcal</div>
-          </div>
-          <div class="preset-chip-btn goal-option-card" data-goal="maintain" onclick="selectGoal('maintain')" style="padding:14px 8px;text-align:center;">
-            <div style="font-size:1.4rem;margin-bottom:4px;">⚖️</div>
-            <div style="font-weight:700;font-size:0.85rem;">Maintenance</div>
-            <div style="font-size:0.7rem;color:var(--text-tertiary);">Balance TDEE</div>
-          </div>
-          <div class="preset-chip-btn goal-option-card" data-goal="muscle_gain" onclick="selectGoal('muscle_gain')" style="padding:14px 8px;text-align:center;">
-            <div style="font-size:1.4rem;margin-bottom:4px;">💪</div>
-            <div style="font-weight:700;font-size:0.85rem;">Muscle Gain</div>
-            <div style="font-size:0.7rem;color:var(--text-tertiary);">+300 kcal</div>
-          </div>
-        </div>
-
-        <!-- ACTIVITY LEVEL -->
-        <div class="section-eyebrow">Physical Activity Level</div>
-        <div class="presets-grid" style="grid-template-columns:1fr 1fr;margin-bottom:24px;">
-          <div class="preset-chip-btn activity-option-card" data-activity="sedentary" onclick="selectActivity('sedentary')" style="text-align:left;padding:10px 12px;">
-            <div style="font-weight:600;">🪑 Sedentary</div>
-            <div style="font-size:0.7rem;color:var(--text-tertiary);">Desk job, minimal exercise</div>
-          </div>
-          <div class="preset-chip-btn activity-option-card" data-activity="light" onclick="selectActivity('light')" style="text-align:left;padding:10px 12px;">
-            <div style="font-weight:600;">🚶 Light Active</div>
-            <div style="font-size:0.7rem;color:var(--text-tertiary);">1-3 days workout/week</div>
-          </div>
-          <div class="preset-chip-btn activity-option-card active" data-activity="moderate" onclick="selectActivity('moderate')" style="text-align:left;padding:10px 12px;">
-            <div style="font-weight:600;">🏃 Moderate</div>
-            <div style="font-size:0.7rem;color:var(--text-tertiary);">3-5 days gym/sports</div>
-          </div>
-          <div class="preset-chip-btn activity-option-card" data-activity="active" onclick="selectActivity('active')" style="text-align:left;padding:10px 12px;">
-            <div style="font-weight:600;">🏋️ Heavy Active</div>
-            <div style="font-size:0.7rem;color:var(--text-tertiary);">6-7 days intense training</div>
-          </div>
-        </div>
-
-        <button type="button" class="btn btn-primary btn-block" onclick="saveProfile()">
-          <span>🎯</span> <span>Calculate & Save Targets</span>
-        </button>
-      </div>
-
-      <!-- PERSONALIZED TARGETS OUTPUT CARD -->
-      <div class="surface-card" id="profile-targets-card" style="display:none;">
-        <div class="card-header">
-          <div class="card-title-group">
-            <div class="section-eyebrow">Calculated Metabolism</div>
-            <div class="card-title">Daily Nutrition Targets</div>
-          </div>
-        </div>
-
-        <div class="macro-metric-grid">
-          <div class="macro-metric-box">
-            <div class="macro-metric-val cal" id="out-cal-target">—</div>
-            <div class="macro-metric-lbl">Calories / Day</div>
-          </div>
-          <div class="macro-metric-box">
-            <div class="macro-metric-val pro" id="out-pro-target">—</div>
-            <div class="macro-metric-lbl">Protein Target</div>
-          </div>
-          <div class="macro-metric-box">
-            <div class="macro-metric-val car" id="out-car-target">—</div>
-            <div class="macro-metric-lbl">Carbs Target</div>
-          </div>
-          <div class="macro-metric-box">
-            <div class="macro-metric-val fat" id="out-fat-target">—</div>
-            <div class="macro-metric-lbl">Fats Target</div>
-          </div>
-        </div>
-
-        <div style="background:var(--bg-surface-subtle);border-radius:var(--radius-md);padding:14px;font-size:0.85rem;margin-bottom:16px;">
-          <div style="margin-bottom:4px;">📊 <b>Asian-Indian BMI:</b> <span id="out-bmi-val">—</span></div>
-          <div>🔥 <b>Total Daily Energy Expenditure (TDEE):</b> <span id="out-tdee-val">—</span></div>
-        </div>
-
-        <button type="button" class="btn btn-secondary btn-block" onclick="showScreen('home')">
-          <span>🏠</span> <span>Return to Dashboard</span>
-        </button>
-      </div>
-    </main>
-
+<!-- TOP BAR -->
+<header class="top-bar">
+  <div class="brand" onclick="switchTab('home')">Nutri<span>Vision</span></div>
+  <div class="top-actions">
+    <button class="icon-btn" onclick="openCoachQuickTip()" title="AI Tip">&#x1F916;</button>
+    <button class="icon-btn" onclick="openModal('gemini-key-modal')" title="Settings">&#x2699;&#xFE0F;</button>
   </div>
+</header>
 
-  <!-- MOBILE BOTTOM NAVIGATION BAR -->
-  <nav class="mobile-bottom-bar">
-    <button type="button" class="mobile-nav-item active" data-screen="home" onclick="showScreen('home')">
-      <span class="mobile-icon">🏠</span>
-      <span class="mobile-label">Home</span>
-    </button>
-    <button type="button" class="mobile-nav-item" data-screen="foodlog" onclick="showScreen('foodlog')">
-      <span class="mobile-icon">🍽️</span>
-      <span class="mobile-label">Food Log</span>
-    </button>
-    <button type="button" class="mobile-nav-item" data-screen="history" onclick="showScreen('history')">
-      <span class="mobile-icon">📔</span>
-      <span class="mobile-label">History</span>
-    </button>
-    <button type="button" class="mobile-nav-item" data-screen="coach" onclick="showScreen('coach')">
-      <span class="mobile-icon">🤖</span>
-      <span class="mobile-label">Coach</span>
-    </button>
-    <button type="button" class="mobile-nav-item" data-screen="profile" onclick="showScreen('profile')">
-      <span class="mobile-icon">👤</span>
-      <span class="mobile-label">Profile</span>
-    </button>
-  </nav>
+<!-- TOAST -->
+<div class="toast" id="app-toast"></div>
 
-  <!-- ==========================================================================
-       MODALS
-       ========================================================================== -->
+<!-- CONTENT -->
+<div class="tab-content">
 
-  <!-- BARCODE & FMCG MODAL (kept for backwards compat, but inline barcode is now on Food Log) -->
-  <div class="modal-backdrop" id="barcode-scan-modal">
-    <div class="modal-dialog" style="text-align:center;">
-      <button type="button" class="modal-close-icon" onclick="closeBarcodeModal()">✕</button>
-      <h3 style="font-size:1.15rem;margin-bottom:4px;">Scan Packaged Item</h3>
-      <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:14px;">Instant lookup for Amul, Mother Dairy, Nandini, Vadilal, Epigamia & FMCG brands.</p>
+  <!-- HOME -->
+  <div class="tab-pane active" id="tab-home">
+    <div style="margin-bottom:18px;">
+      <div style="font-size:.82rem;color:#64748b;margin-bottom:2px;" id="home-greeting">Good morning &#x1F44B;</div>
+      <div style="font-family:'Outfit',sans-serif;font-size:1.35rem;font-weight:900;color:#f0f4f8;" id="home-headline">Let's track today</div>
+    </div>
 
-      <div id="barcode-camera-viewport" style="width:100%;height:220px;position:relative;border-radius:var(--radius-md);overflow:hidden;background:#000;border:1px solid var(--border-subtle);margin-bottom:12px;"></div>
+    <!-- No profile prompt -->
+    <div class="card" id="hero-profile-cta" style="display:none;text-align:center;">
+      <div style="font-size:2.5rem;margin-bottom:10px;">&#x1F44B;</div>
+      <div style="font-size:1rem;font-weight:700;color:#f0f4f8;margin-bottom:6px;">Set up your profile first</div>
+      <div style="font-size:.84rem;color:#64748b;margin-bottom:16px;">Tell us your goal and we'll calculate your daily calorie target.</div>
+      <button class="btn btn-primary btn-block" onclick="switchTab('me')">Set Up Profile &#x2192;</button>
+    </div>
 
-      <div style="display:flex;justify-content:center;gap:8px;margin-bottom:14px;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTorchlight()">🔦 Flashlight</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('barcode-photo-input').click()">🖼️ Upload Photo</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('package-ocr-input').click()">🏷️ Package OCR</button>
+    <!-- Calorie ring -->
+    <div class="card" id="dash-active-summary" style="display:none;">
+      <div class="card-title">Today's Calories</div>
+      <div class="ring-wrap">
+        <div class="ring-container">
+          <svg viewBox="0 0 110 110">
+            <circle class="ring-track" cx="55" cy="55" r="46"/>
+            <circle class="ring-fill" id="dash-gauge-fill" cx="55" cy="55" r="46" stroke-dasharray="289" stroke-dashoffset="289"/>
+          </svg>
+          <div class="ring-center">
+            <div class="ring-cal" id="dash-cal-remaining">&#x2014;</div>
+            <div class="ring-lbl">KCAL LEFT</div>
+          </div>
+        </div>
+        <div class="ring-stats">
+          <div class="ring-stat"><span class="rs-label">Eaten</span><span class="rs-val" id="dash-cal-eaten">0</span></div>
+          <div class="ring-stat"><span class="rs-label">Target</span><span class="rs-val" id="dash-cal-target">&#x2014;</span></div>
+          <div class="ring-stat"><span class="rs-label">Burned</span><span class="rs-val" id="home-burned" style="color:#f59e0b;">0</span></div>
+          <div class="ring-stat"><span class="rs-label">Net</span><span class="rs-val" id="home-net">&#x2014;</span></div>
+        </div>
       </div>
-
-      <div style="display:flex;gap:8px;margin-top:10px;">
-        <input type="text" class="field-input" id="modal-barcode-digits" placeholder="Enter barcode number..." style="font-family:var(--font-mono);font-size:0.85rem;" onkeydown="if(event.key==='Enter') lookupManualBarcodeString()">
-        <button type="button" class="btn btn-primary btn-sm" onclick="lookupManualBarcodeString()">Lookup</button>
+      <div class="macro-row">
+        <div class="macro-item"><div class="macro-hdr"><span class="macro-name">Protein</span><span class="macro-val" id="dash-pro-val">0g / &#x2014;</span></div><div class="bar-track"><div class="bar-fill" id="dash-pro-bar" style="width:0%;background:#38bdf8;"></div></div></div>
+        <div class="macro-item"><div class="macro-hdr"><span class="macro-name">Carbs</span><span class="macro-val" id="dash-carb-val">0g / &#x2014;</span></div><div class="bar-track"><div class="bar-fill" id="dash-carb-bar" style="width:0%;background:#a78bfa;"></div></div></div>
+        <div class="macro-item"><div class="macro-hdr"><span class="macro-name">Fat</span><span class="macro-val" id="dash-fat-val">0g / &#x2014;</span></div><div class="bar-track"><div class="bar-fill" id="dash-fat-bar" style="width:0%;background:#fbbf24;"></div></div></div>
       </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="sec-hdr"><span class="sec-title">Quick Actions</span></div>
+    <div class="quick-grid">
+      <div class="quick-btn" onclick="switchTab('log');setLogTab('scan')"><span class="q-icon">&#x1F4F8;</span><div><div class="q-title">Scan Food</div><div class="q-sub">Take a photo</div></div></div>
+      <div class="quick-btn sec" onclick="switchTab('log');setLogTab('search')"><span class="q-icon">&#x1F50D;</span><div><div class="q-title">Search Food</div><div class="q-sub">Find &amp; log</div></div></div>
+      <div class="quick-btn sec" onclick="switchTab('log');setLogTab('voice')"><span class="q-icon">&#x1F399;&#xFE0F;</span><div><div class="q-title">Voice Log</div><div class="q-sub">Speak your meal</div></div></div>
+      <div class="quick-btn sec" onclick="switchTab('tools');setToolTab('favourites')"><span class="q-icon">&#x2B50;</span><div><div class="q-title">Favourites</div><div class="q-sub">1-tap log</div></div></div>
+    </div>
+
+    <!-- Water -->
+    <div class="card card-sm">
+      <div class="sec-hdr" style="margin-bottom:8px;">
+        <span class="card-title" style="margin:0;">&#x1F4A7; Water Today</span>
+        <span style="font-size:.82rem;font-weight:700;color:#0ea5e9;" id="water-count-home">0 / 8</span>
+      </div>
+      <div class="water-cups" id="water-cups-home"></div>
+    </div>
+
+    <!-- Today meals preview -->
+    <div class="sec-hdr" style="margin-top:4px;">
+      <span class="sec-title">Today's Meals</span>
+      <button class="sec-link" onclick="switchTab('log');setLogTab('diary')">View all &#x2192;</button>
+    </div>
+    <div id="home-meal-preview">
+      <div class="empty"><div class="empty-icon">&#x1F37D;&#xFE0F;</div><div class="empty-text">No meals logged yet.<br>Tap <strong>Scan Food</strong> to start.</div></div>
+    </div>
+
+    <!-- AI insight -->
+    <div class="insight" id="home-insight" style="display:none;">
+      <div class="insight-icon">&#x1F916;</div>
+      <div class="insight-text" id="home-insight-text">Loading tip...</div>
     </div>
   </div>
 
-  <!-- BARCODE RESULT CARD POPUP -->
-  <div class="modal-backdrop" id="barcode-result-modal">
-    <div class="modal-dialog">
-      <button type="button" class="modal-close-icon" onclick="document.getElementById('barcode-result-modal').classList.remove('open')">✕</button>
-      <div class="section-eyebrow" id="bc-brand-badge">PACKAGED PRODUCT</div>
-      <h3 id="bc-item-name" style="font-size:1.25rem;margin-bottom:14px;">—</h3>
+  <!-- LOG -->
+  <div class="tab-pane" id="tab-log">
+    <div class="inner-tabs">
+      <button class="inner-tab active" data-t="scan" onclick="setLogTab('scan')">&#x1F4F8; Scan</button>
+      <button class="inner-tab" data-t="search" onclick="setLogTab('search')">&#x1F50D; Search</button>
+      <button class="inner-tab" data-t="barcode" onclick="setLogTab('barcode')">&#x1F4E6; Barcode</button>
+      <button class="inner-tab" data-t="voice" onclick="setLogTab('voice')">&#x1F399; Voice</button>
+      <button class="inner-tab" data-t="diary" onclick="setLogTab('diary')">&#x1F4CB; Diary</button>
+    </div>
 
-      <div class="macro-metric-grid">
-        <div class="macro-metric-box"><div class="macro-metric-val cal" id="bc-val-cal">0</div><div class="macro-metric-lbl">Cal</div></div>
-        <div class="macro-metric-box"><div class="macro-metric-val pro" id="bc-val-pro">0g</div><div class="macro-metric-lbl">Pro</div></div>
-        <div class="macro-metric-box"><div class="macro-metric-val car" id="bc-val-car">0g</div><div class="macro-metric-lbl">Carb</div></div>
-        <div class="macro-metric-box"><div class="macro-metric-val fat" id="bc-val-fat">0g</div><div class="macro-metric-lbl">Fat</div></div>
+    <!-- SCAN -->
+    <div class="inner-pane active" id="logtab-scan">
+      <div class="scan-zone" id="scan-zone" onclick="document.getElementById('scan-file-input').click()">
+        <div class="scan-icon">&#x1F4F7;</div>
+        <div class="scan-hint">Tap to take a photo or upload an image of your food</div>
+        <img id="scan-preview-img">
+      </div>
+      <input type="file" id="scan-file-input" accept="image/*" capture="environment" style="display:none;" onchange="handleScanFile(this)">
+
+      <div class="pill-row" style="margin-top:12px;">
+        <span style="font-size:.78rem;color:#64748b;align-self:center;">Meal:</span>
+        <div class="pill active" data-meal="breakfast" onclick="selectMealType(this,'breakfast')">Breakfast</div>
+        <div class="pill" data-meal="lunch" onclick="selectMealType(this,'lunch')">Lunch</div>
+        <div class="pill" data-meal="dinner" onclick="selectMealType(this,'dinner')">Dinner</div>
+        <div class="pill" data-meal="snack" onclick="selectMealType(this,'snack')">Snack</div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <span class="field-label" style="margin:0;">Portion (g / ml)</span>
-        <span id="bc-serving-label" style="font-weight:700;color:var(--accent-primary);">100g</span>
-      </div>
-      <input type="range" id="bc-serving-slider" min="25" max="500" value="100" step="5" style="width:100%;accent-color:var(--accent-primary);margin-bottom:16px;" oninput="updateBarcodeServing(this.value)">
-
-      <button type="button" class="btn btn-primary btn-block" onclick="logBarcodeItemToDiary(); document.getElementById('barcode-result-modal').classList.remove('open');">
-        <span>✅</span> <span>Add to Daily History</span>
+      <button class="btn btn-primary btn-block" id="btn-analyze" onclick="analyzeFood()" style="display:none;margin-top:10px;">
+        &#x1F50D; Identify This Food
       </button>
+
+      <div id="scan-analyzing" style="display:none;" class="loading">
+        <div class="spinner"></div>
+        <div style="margin-top:10px;font-size:.84rem;color:#64748b;">Analysing your food...</div>
+      </div>
+
+      <div id="scan-result" style="display:none;">
+        <div class="result-card">
+
+          <!-- ── AI BADGE ROW ── -->
+          <div id="result-badges-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+
+          <!-- ── FOOD NAME + DESCRIPTION ── -->
+          <div class="result-name" id="result-food-name">&#x2014;</div>
+          <div id="result-ai-desc" style="font-size:.8rem;color:#94a3b8;margin:4px 0 10px;line-height:1.4;display:none;"></div>
+
+          <!-- ── MACRO BOXES ── -->
+          <div class="macros-row">
+            <div class="macro-box"><div class="mv cal" id="r-cal">0</div><div class="ml">kcal</div></div>
+            <div class="macro-box"><div class="mv pro" id="r-pro">0g</div><div class="ml">protein</div></div>
+            <div class="macro-box"><div class="mv car" id="r-car">0g</div><div class="ml">carbs</div></div>
+            <div class="macro-box"><div class="mv fat" id="r-fat">0g</div><div class="ml">fat</div></div>
+          </div>
+
+          <!-- ── PREDICTIONS SECTION ── -->
+          <div id="result-predictions-section" style="display:none;margin-bottom:14px;">
+            <!-- Gemini top match -->
+            <div id="result-gemini-match" style="display:none;margin-bottom:8px;">
+              <div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Other Likely Matches</div>
+              <div id="result-gemini-chip" style="display:inline-flex;align-items:center;gap:6px;background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.3);border-radius:99px;padding:5px 12px;font-size:.75rem;font-weight:700;color:#f97316;"></div>
+            </div>
+            <!-- PyTorch ensemble -->
+            <div id="result-ensemble-wrap">
+              <div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">&#x1F916; 3-Model Ensemble Predictions</div>
+              <div id="result-ensemble-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+            </div>
+          </div>
+
+          <!-- ── PORTION SLIDER ── -->
+          <div class="portion-row" style="margin-bottom:4px;"><span class="portion-lbl">Serving Portion</span><span class="portion-val" id="portion-display">100g</span></div>
+          <input type="range" id="portion-slider-input" min="25" max="500" value="100" step="5" oninput="updatePortion(this.value)">
+
+          <!-- ── ACTION BUTTONS ── -->
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="btn btn-primary" style="flex:1;" onclick="logScannedFood()">&#x2705; Add to Diary</button>
+            <button class="btn btn-secondary" onclick="saveCurrentAsFavourite()" title="Save favourite">&#x2B50;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="inner-pane" id="logtab-search">
+      <div class="search-wrap">
+        <span class="search-icon-abs">&#x1F50D;</span>
+        <input type="text" class="search-input" id="food-search-input" placeholder="Search dal, roti, chicken curry&#x2026;" oninput="searchFood(this.value)" autocomplete="off">
+      </div>
+      <div class="pill-row">
+        <div class="pill active" data-cat="all" onclick="filterCategory(this,'all')">All</div>
+        <div class="pill" data-cat="vegetarian" onclick="filterCategory(this,'vegetarian')">Veg &#x1F33F;</div>
+        <div class="pill" data-cat="non-vegetarian" onclick="filterCategory(this,'non-vegetarian')">Non-Veg &#x1F357;</div>
+        <div class="pill" data-cat="dairy" onclick="filterCategory(this,'dairy')">Dairy &#x1F95B;</div>
+        <div class="pill" data-cat="snack" onclick="filterCategory(this,'snack')">Snacks</div>
+      </div>
+      <div id="search-results-list">
+        <div class="empty"><div class="empty-icon">&#x1F372;</div><div class="empty-text">Start typing to search 191 Indian foods</div></div>
+      </div>
+    </div>
+
+    <!-- BARCODE -->
+    <div class="inner-pane" id="logtab-barcode">
+
+      <!-- Hero prompt -->
+      <div id="barcode-prompt-card" class="card" style="text-align:center;padding:26px 20px;">
+        <div style="font-size:2.8rem;margin-bottom:10px;">&#x1F4F7;</div>
+        <div style="font-size:1rem;font-weight:700;color:#f0f4f8;margin-bottom:5px;">Scan a Barcode</div>
+        <div style="font-size:.82rem;color:#64748b;margin-bottom:18px;">Point camera at any packaged food barcode · EAN-13, EAN-8, UPC-A supported</div>
+        <button class="btn btn-primary btn-block" id="btn-start-barcode" onclick="startBarcodeScanner()" style="margin-bottom:10px;">&#x1F4F7; Open Camera Scanner</button>
+        <!-- Manual entry fallback -->
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <input type="number" id="manual-barcode-input" class="field-input" placeholder="Or type barcode manually&#x2026;" style="flex:1;font-size:.85rem;" inputmode="numeric">
+          <button class="btn btn-secondary" style="padding:0 14px;" onclick="manualBarcodeSearch()">&#x1F50D;</button>
+        </div>
+      </div>
+
+      <!-- Live scanner viewfinder -->
+      <div id="barcode-scanner-view" style="display:none;border-radius:16px;overflow:hidden;position:relative;background:#000;">
+        <div id="barcode-video-wrap" style="width:100%;min-height:220px;"></div>
+        <!-- Laser scan line -->
+        <div id="barcode-laser" style="position:absolute;left:10%;width:80%;height:2px;background:linear-gradient(90deg,transparent,#f97316,transparent);box-shadow:0 0 8px #f97316;animation:laser-scan 1.8s ease-in-out infinite;top:50%;transform:translateY(-50%);"></div>
+        <!-- Corner brackets -->
+        <div style="position:absolute;top:16px;left:16px;width:30px;height:30px;border-top:3px solid #f97316;border-left:3px solid #f97316;border-radius:3px 0 0 0;"></div>
+        <div style="position:absolute;top:16px;right:16px;width:30px;height:30px;border-top:3px solid #f97316;border-right:3px solid #f97316;border-radius:0 3px 0 0;"></div>
+        <div style="position:absolute;bottom:52px;left:16px;width:30px;height:30px;border-bottom:3px solid #f97316;border-left:3px solid #f97316;border-radius:0 0 0 3px;"></div>
+        <div style="position:absolute;bottom:52px;right:16px;width:30px;height:30px;border-bottom:3px solid #f97316;border-right:3px solid #f97316;border-radius:0 0 3px 0;"></div>
+        <!-- Status -->
+        <div id="barcode-scan-status" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);padding:8px;text-align:center;font-size:.75rem;color:#f97316;font-weight:600;">&#x1F7E0; Scanning — hold barcode steady in frame</div>
+        <button class="btn btn-secondary" style="margin-top:0;border-radius:0 0 16px 16px;width:100%;padding:10px;" onclick="stopBarcodeScanner()">&#x23F9; Stop Scanner</button>
+      </div>
+
+      <!-- Result area -->
+      <div id="barcode-result" style="display:none;margin-top:14px;"></div>
+    </div>
+
+    <!-- VOICE -->
+    <div class="inner-pane" id="logtab-voice">
+      <div class="card">
+        <div style="font-size:.95rem;font-weight:700;color:#f0f4f8;margin-bottom:5px;">Describe what you ate</div>
+        <div style="font-size:.82rem;color:#64748b;margin-bottom:14px;">e.g. &ldquo;I had 2 rotis with dal and a cup of curd for dinner&rdquo;</div>
+        <textarea id="voice-text-input" class="field-input" rows="3" placeholder="Type or tap the mic to speak&#x2026;" style="resize:none;margin-bottom:10px;"></textarea>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" id="btn-mic" onclick="startVoiceInput()" style="flex:0 0 56px;">&#x1F3A4;</button>
+          <button class="btn btn-primary" onclick="parseVoiceLog()" style="flex:1;">&#x1F9E0; Parse Meal</button>
+        </div>
+      </div>
+      <div id="voice-parse-result" style="display:none;margin-top:12px;"></div>
+    </div>
+
+    <!-- DIARY -->
+    <div class="inner-pane" id="logtab-diary">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:.9rem;font-weight:700;color:#f0f4f8;" id="diary-date-label">Today</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary" style="padding:8px 12px;" onclick="changeDiaryDate(-1)">&#x2039;</button>
+          <button class="btn btn-secondary" style="padding:8px 12px;" onclick="changeDiaryDate(1)">&#x203A;</button>
+        </div>
+      </div>
+      <div class="card card-sm" style="margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:6px;">
+          <div><div style="font-size:1.05rem;font-weight:800;color:#f97316;" id="diary-total-cal">0</div><div style="font-size:.63rem;color:#64748b;">kcal</div></div>
+          <div><div style="font-size:1.05rem;font-weight:800;color:#38bdf8;" id="diary-total-pro">0g</div><div style="font-size:.63rem;color:#64748b;">protein</div></div>
+          <div><div style="font-size:1.05rem;font-weight:800;color:#a78bfa;" id="diary-total-carb">0g</div><div style="font-size:.63rem;color:#64748b;">carbs</div></div>
+          <div><div style="font-size:1.05rem;font-weight:800;color:#fbbf24;" id="diary-total-fat">0g</div><div style="font-size:.63rem;color:#64748b;">fat</div></div>
+        </div>
+      </div>
+      <div id="diary-entries-list"><div class="empty"><div class="empty-icon">&#x1F4CB;</div><div class="empty-text">No meals logged yet.</div></div></div>
     </div>
   </div>
 
-  <!-- GEMINI CONFIG MODAL -->
-  <div class="modal-backdrop" id="gemini-key-modal">
-    <div class="modal-dialog">
-      <button type="button" class="modal-close-icon" onclick="closeGeminiModal()">✕</button>
-      <div class="hero-pill" style="margin-bottom:8px;">Google Gemini Free API</div>
-      <h3 style="font-size:1.15rem;margin-bottom:6px;">Configure NutriCoach AI</h3>
-      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:16px;">Provide your free Gemini API key to unlock personalized Indian diet intelligence.</p>
-
-      <div class="form-field">
-        <label class="field-label">Gemini API Key</label>
-        <input type="password" class="field-input" id="gemini-key-input" placeholder="AIzaSy...">
+  <!-- PROGRESS -->
+  <div class="tab-pane" id="tab-progress">
+    <div class="stat-grid">
+      <div class="stat-box"><div class="stat-num" style="color:#f97316;" id="p-streak">0</div><div class="stat-sub">Streak &#x1F525;</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:#10b981;" id="p-avg-cal">0</div><div class="stat-sub">Avg Cal</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:#6366f1;" id="p-avg-pro">0g</div><div class="stat-sub">Avg Protein</div></div>
+    </div>
+    <div class="pill-row">
+      <div class="pill active" id="period-7" onclick="selectPeriod(7,this)">7 Days</div>
+      <div class="pill" id="period-14" onclick="selectPeriod(14,this)">14 Days</div>
+      <div class="pill" id="period-30" onclick="selectPeriod(30,this)">30 Days</div>
+    </div>
+    <div class="card"><div class="sec-hdr" style="margin-bottom:12px;"><span class="sec-title">&#x1F525; Calories</span></div><div style="position:relative;height:170px;"><canvas id="chart-calories"></canvas></div></div>
+    <div class="card"><div class="sec-hdr" style="margin-bottom:12px;"><span class="sec-title">&#x1F4AA; Protein</span></div><div style="position:relative;height:140px;"><canvas id="chart-protein"></canvas></div></div>
+    <div class="card">
+      <div class="sec-hdr" style="margin-bottom:8px;"><span class="sec-title">&#x2696;&#xFE0F; Body Weight</span></div>
+      <div style="position:relative;height:130px;margin-bottom:12px;"><canvas id="chart-weight"></canvas></div>
+      <div style="display:flex;gap:8px;"><input type="number" id="weight-input" class="field-input" placeholder="Today's weight (kg)" step="0.1" min="20" max="300" style="flex:1;padding:10px 12px;"><button class="btn btn-primary" style="padding:10px 16px;" onclick="logWeightToday()">Log</button></div>
+    </div>
+    <div class="card">
+      <div class="sec-hdr" style="margin-bottom:12px;"><span class="sec-title">&#x1F3CB;&#xFE0F; Exercise Today</span><button class="sec-link" onclick="openModal('exercise-modal')">+ Add</button></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <div style="flex:1;background:rgba(249,115,22,.08);border-radius:10px;padding:10px;text-align:center;"><div style="font-size:1rem;font-weight:800;color:#f97316;" id="p-food-cal">0</div><div style="font-size:.63rem;color:#64748b;">Food</div></div>
+        <div style="flex:1;background:rgba(245,158,11,.08);border-radius:10px;padding:10px;text-align:center;"><div style="font-size:1rem;font-weight:800;color:#f59e0b;" id="p-burned-cal">0</div><div style="font-size:.63rem;color:#64748b;">Burned</div></div>
+        <div style="flex:1;background:rgba(16,185,129,.08);border-radius:10px;padding:10px;text-align:center;"><div style="font-size:1rem;font-weight:800;color:#10b981;" id="p-net-cal">0</div><div style="font-size:.63rem;color:#64748b;">Net</div></div>
       </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
-        <button type="button" class="btn btn-secondary" id="btn-test-gemini-key" onclick="testGeminiAPIKey()">Test Key</button>
-        <button type="button" class="btn btn-primary" onclick="saveGeminiAPIKey()">Save Key</button>
+      <div id="p-exercise-list"><div style="font-size:.83rem;color:#64748b;">No exercise logged today.</div></div>
+    </div>
+    <div class="card">
+      <div class="sec-hdr" style="margin-bottom:12px;"><span class="sec-title">&#x1F9EA; Micronutrients</span></div>
+      <div id="p-micronutrients"><div style="font-size:.83rem;color:#64748b;">Log meals to see micronutrient data.</div></div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06);">
+        <div class="sec-hdr" style="margin-bottom:8px;"><span class="sec-title">&#x1F3E5; Glycemic Index</span><button class="btn btn-secondary" style="padding:6px 12px;font-size:.76rem;" onclick="loadGlycemicInfo()">Check Today</button></div>
+        <div id="p-gi-result" style="display:none;"></div>
       </div>
     </div>
   </div>
 
-  <!-- APPLICATION JAVASCRIPT -->
-  <script src="/static/js/app.js?v=2.3"></script>
+  <!-- TOOLS -->
+  <div class="tab-pane" id="tab-tools">
+    <div class="pill-row" id="tools-pills">
+      <div class="pill active" data-tt="favourites" onclick="setToolTab('favourites')">&#x2B50; Favourites</div>
+      <div class="pill" data-tt="recipes" onclick="setToolTab('recipes')">&#x1F372; Recipes</div>
+      <div class="pill" data-tt="mealplan" onclick="setToolTab('mealplan')">&#x1F4C5; Meal Plan</div>
+    </div>
+
+    <!-- FAVOURITES -->
+    <div class="inner-pane active" id="toolstab-favourites">
+      <div class="card">
+        <div style="font-size:.84rem;color:#64748b;margin-bottom:12px;">Save meals you eat often for instant 1-tap logging.</div>
+        <div id="t-favourites-list"><div class="empty" style="padding:16px 0;"><div class="empty-icon">&#x2B50;</div><div class="empty-text">No favourites yet.<br>Scan a meal and tap &#x2B50; to save it.</div></div></div>
+      </div>
+    </div>
+
+    <!-- RECIPES -->
+    <div class="inner-pane" id="toolstab-recipes">
+      <div class="card" style="margin-bottom:12px;">
+        <div style="font-size:.9rem;font-weight:700;color:#f0f4f8;margin-bottom:4px;">Build a Custom Recipe</div>
+        <div style="font-size:.82rem;color:#64748b;margin-bottom:14px;">Add ingredients with weights and get exact nutrition per serving.</div>
+        <div class="form-row"><label class="field-label">Recipe Name</label><input type="text" id="recipe-name" class="field-input" placeholder="e.g. Maa ki Dal Tadka"></div>
+        <div class="form-row"><label class="field-label">Servings</label><input type="number" id="recipe-servings" class="field-input" value="4" min="1" max="20"></div>
+        <div class="sec-hdr" style="margin-bottom:8px;"><span style="font-size:.82rem;font-weight:600;color:#94a3b8;">Ingredients</span><button class="sec-link" onclick="addRecipeIngredient()">+ Add</button></div>
+        <div id="recipe-ingredients-list" style="margin-bottom:10px;"></div>
+        <button class="btn btn-primary btn-block" onclick="saveRecipe()">&#x1F4BE; Save &amp; Calculate Nutrition</button>
+        <div id="recipe-result" style="display:none;margin-top:12px;"></div>
+      </div>
+      <div class="card"><div class="sec-title" style="margin-bottom:12px;">My Saved Recipes</div><div id="t-recipes-list"><div class="empty" style="padding:10px 0;"><div class="empty-text">No recipes yet.</div></div></div></div>
+    </div>
+
+    <!-- MEAL PLAN -->
+    <div class="inner-pane" id="toolstab-mealplan">
+      <div class="card" style="margin-bottom:12px;">
+        <div style="font-size:.9rem;font-weight:700;color:#f0f4f8;margin-bottom:4px;">AI Meal Planner</div>
+        <div style="font-size:.82rem;color:#64748b;margin-bottom:14px;">Gemini AI creates a personalised Indian meal plan for you.</div>
+        <div class="form-row"><label class="field-label">Diet Type</label><select id="plan-diet" class="field-input"><option value="vegetarian">&#x1F957; Vegetarian</option><option value="non-vegetarian">&#x1F357; Non-Vegetarian</option><option value="vegan">&#x1F331; Vegan</option><option value="eggetarian">&#x1F95A; Eggetarian</option></select></div>
+        <div class="form-row"><label class="field-label">Regional Preference</label><select id="plan-region" class="field-input"><option value="North Indian">North Indian</option><option value="South Indian">South Indian</option><option value="Pan Indian">Pan Indian (Mixed)</option><option value="Maharashtrian">Maharashtrian</option><option value="Bengali">Bengali</option><option value="Gujarati">Gujarati</option></select></div>
+        <div class="form-row"><label class="field-label">Number of Days</label><select id="plan-days" class="field-input"><option value="3">3 Days</option><option value="5">5 Days</option><option value="7" selected>7 Days</option></select></div>
+        <button class="btn btn-primary btn-block" id="btn-generate-plan" onclick="generateMealPlan()">&#x2728; Generate My Meal Plan</button>
+      </div>
+      <div id="meal-plan-loading" style="display:none;" class="loading"><div class="spinner"></div><div style="margin-top:10px;font-size:.84rem;color:#64748b;">Generating your plan&#x2026;</div></div>
+      <div id="meal-plan-output" style="display:none;">
+        <div class="card card-sm" style="margin-bottom:10px;"><div class="card-title">&#x1F6D2; Shopping List</div><div id="plan-shopping-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div></div>
+        <div class="card card-sm" style="margin-bottom:10px;"><div class="card-title">&#x1F4A1; Tips</div><div id="plan-tips"></div></div>
+        <div id="plan-days-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ME -->
+  <div class="tab-pane" id="tab-me">
+    <!-- Profile summary (after setup) -->
+    <div class="card" id="profile-summary-card" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div><div style="font-size:1.1rem;font-weight:800;color:#f0f4f8;" id="me-name">&#x2014;</div><div style="font-size:.8rem;color:#64748b;margin-top:2px;" id="me-goal-label">&#x2014;</div></div>
+        <button class="btn btn-secondary" style="padding:8px 14px;font-size:.78rem;" onclick="toggleProfileEdit()">Edit</button>
+      </div>
+      <div class="me-targets">
+        <div class="me-target-box"><div class="me-num" style="color:#f97316;" id="me-calories">&#x2014;</div><div class="me-lbl">kcal/day</div></div>
+        <div class="me-target-box"><div class="me-num" style="color:#38bdf8;" id="me-protein">&#x2014;</div><div class="me-lbl">protein/day</div></div>
+        <div class="me-target-box"><div class="me-num" style="color:#a78bfa;" id="me-bmi">&#x2014;</div><div class="me-lbl">BMI</div></div>
+      </div>
+    </div>
+
+    <!-- Profile edit form -->
+    <div class="card" id="profile-edit-card">
+      <div class="card-title">Your Profile</div>
+      <div class="form-row"><label class="field-label">Name</label><input type="text" id="pro-name" class="field-input" placeholder="Your name"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px;">
+        <div><label class="field-label">Age</label><input type="number" id="pro-age" class="field-input" placeholder="25" min="10" max="100"></div>
+        <div><label class="field-label">Gender</label><select id="pro-gender" class="field-input"><option value="male">Male</option><option value="female">Female</option></select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px;">
+        <div><label class="field-label">Height (cm)</label><input type="number" id="pro-height" class="field-input" placeholder="170"></div>
+        <div><label class="field-label">Weight (kg)</label><input type="number" id="pro-weight" class="field-input" placeholder="70"></div>
+      </div>
+      <div class="form-row"><label class="field-label">Activity Level</label><select id="pro-activity" class="field-input"><option value="sedentary">Sedentary (desk job)</option><option value="lightly_active">Light (1-3 days/week)</option><option value="moderately_active" selected>Moderate (3-5 days/week)</option><option value="very_active">Active (6-7 days/week)</option><option value="extra_active">Very Active (athlete)</option></select></div>
+      <div class="form-row"><label class="field-label">Goal</label><select id="pro-goal" class="field-input"><option value="lose_weight">&#x1F525; Lose Weight</option><option value="maintain" selected>&#x2696;&#xFE0F; Maintain Weight</option><option value="build_muscle">&#x1F4AA; Build Muscle</option></select></div>
+      <button class="btn btn-primary btn-block" onclick="saveProfile()">Save Profile</button>
+    </div>
+
+    <!-- NutriCoach -->
+    <div class="card" style="margin-top:2px;">
+      <div class="sec-hdr" style="margin-bottom:12px;"><span class="sec-title">&#x1F916; NutriCoach AI</span><span style="background:rgba(16,185,129,.15);color:#10b981;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;">Free</span></div>
+      <div id="coach-messages" class="chat-wrap" style="max-height:260px;overflow-y:auto;">
+        <div class="chat-bubble bot">Hi! I'm your NutriCoach &#x1F64F; Ask me anything about Indian food, nutrition, or your health goals.</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" style="padding:10px 12px;" onclick="startCoachVoice()">&#x1F3A4;</button>
+        <input type="text" id="coach-query-input" class="field-input" placeholder="Ask anything&#x2026;" style="flex:1;padding:10px 12px;" onkeydown="if(event.key==='Enter')sendCoachChat()">
+        <button class="btn btn-primary" style="padding:10px 14px;" onclick="sendCoachChat()">&#x2192;</button>
+      </div>
+    </div>
+
+    <!-- API Key -->
+    <div class="card card-sm" style="margin-top:2px;">
+      <div class="sec-hdr" style="margin-bottom:8px;"><span style="font-size:.85rem;font-weight:700;color:#f0f4f8;">&#x1F511; Gemini API Key</span><span id="gemini-key-status" style="display:none;background:rgba(16,185,129,.15);color:#10b981;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;">Active</span></div>
+      <div style="display:flex;gap:8px;"><input type="password" id="gemini-key-input" class="field-input" placeholder="AIzaSy&#x2026;" style="flex:1;padding:10px 12px;"><button class="btn btn-primary" style="padding:10px 14px;" onclick="saveGeminiAPIKey()">Save</button></div>
+      <div style="font-size:.72rem;color:#64748b;margin-top:6px;">Required for AI scanning &amp; NutriCoach. <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#f97316;">Get free key &#x2192;</a></div>
+    </div>
+  </div>
+
+</div><!-- /tab-content -->
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-tab active" id="nav-home" onclick="switchTab('home')"><div class="nav-dot"></div><div class="nav-icon">&#x1F3E0;</div><div class="nav-label">Home</div></button>
+  <button class="nav-tab" id="nav-log" onclick="switchTab('log')"><div class="nav-dot"></div><div class="nav-icon">&#x1F4DD;</div><div class="nav-label">Log</div></button>
+  <button class="nav-tab" id="nav-progress" onclick="switchTab('progress')"><div class="nav-dot"></div><div class="nav-icon">&#x1F4CA;</div><div class="nav-label">Progress</div></button>
+  <button class="nav-tab" id="nav-tools" onclick="switchTab('tools')"><div class="nav-dot"></div><div class="nav-icon">&#x1F37D;&#xFE0F;</div><div class="nav-label">Tools</div></button>
+  <button class="nav-tab" id="nav-me" onclick="switchTab('me')"><div class="nav-dot"></div><div class="nav-icon">&#x1F464;</div><div class="nav-label">Me</div></button>
+</nav>
+
+<!-- MODALS -->
+<div class="modal-bg" id="exercise-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <button class="modal-close" onclick="closeModal('exercise-modal')">&#x2715;</button>
+    <div class="modal-title">Log Exercise</div>
+    <div class="form-row"><label class="field-label">Exercise Type</label><select id="ex-type-select" class="field-input"><option value="walking">&#x1F6B6; Walking</option><option value="running">&#x1F3C3; Running</option><option value="jogging">&#x1F3C3; Jogging</option><option value="cycling">&#x1F6B4; Cycling</option><option value="swimming">&#x1F3CA; Swimming</option><option value="yoga">&#x1F9D8; Yoga</option><option value="gym_strength">&#x1F3CB;&#xFE0F; Gym &#x2014; Strength</option><option value="gym_cardio">&#x1F4AA; Gym &#x2014; Cardio</option><option value="hiit">&#x26A1; HIIT</option><option value="cricket">&#x1F3CF; Cricket</option><option value="badminton">&#x1F3F8; Badminton</option><option value="football">&#x26BD; Football</option><option value="dancing">&#x1F483; Dancing</option><option value="skipping">&#x1FA83; Skipping Rope</option><option value="zumba">&#x1F3B5; Zumba</option><option value="climbing_stairs">&#x1FA9C; Climbing Stairs</option><option value="household_chores">&#x1F3E0; Household Chores</option></select></div>
+    <div class="form-row"><label class="field-label">Duration (minutes)</label><input type="number" id="ex-duration" class="field-input" value="30" min="1" max="300"></div>
+    <button class="btn btn-primary btn-block" onclick="logExercise()">&#x1F525; Log Exercise</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="food-detail-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <button class="modal-close" onclick="closeModal('food-detail-modal')">&#x2715;</button>
+    <div class="modal-title" id="food-modal-name">&#x2014;</div>
+    <div class="macros-row" style="margin-bottom:14px;">
+      <div class="macro-box"><div class="mv cal" id="fm-cal">0</div><div class="ml">kcal</div></div>
+      <div class="macro-box"><div class="mv pro" id="fm-pro">0g</div><div class="ml">protein</div></div>
+      <div class="macro-box"><div class="mv car" id="fm-car">0g</div><div class="ml">carbs</div></div>
+      <div class="macro-box"><div class="mv fat" id="fm-fat">0g</div><div class="ml">fat</div></div>
+    </div>
+    <div class="portion-row"><span class="portion-lbl">Portion size</span><span class="portion-val" id="fm-portion-display">100g</span></div>
+    <input type="range" id="fm-portion-slider" min="25" max="500" value="100" step="5" oninput="updateFoodModalPortion(this.value)">
+    <div class="pill-row" style="margin-bottom:10px;">
+      <div class="pill active" data-meal="breakfast" onclick="fmSelectMeal(this,'breakfast')">Breakfast</div>
+      <div class="pill" data-meal="lunch" onclick="fmSelectMeal(this,'lunch')">Lunch</div>
+      <div class="pill" data-meal="dinner" onclick="fmSelectMeal(this,'dinner')">Dinner</div>
+      <div class="pill" data-meal="snack" onclick="fmSelectMeal(this,'snack')">Snack</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="logFromFoodModal()">&#x2705; Add to Diary</button>
+      <button class="btn btn-secondary" onclick="saveSearchAsFavourite()" title="Save as favourite">&#x2B50;</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="gemini-key-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <button class="modal-close" onclick="closeModal('gemini-key-modal')">&#x2715;</button>
+    <div class="modal-title">&#x1F511; Gemini API Key</div>
+    <div class="form-row"><label class="field-label">Your API Key</label><input type="password" id="gemini-key-modal-input" class="field-input" placeholder="AIzaSy&#x2026;"></div>
+    <div style="font-size:.78rem;color:#64748b;margin-bottom:14px;">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#f97316;">aistudio.google.com</a></div>
+    <button class="btn btn-primary btn-block" onclick="saveGeminiAPIKeyFromModal()">Save Key</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="coach-tip-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <button class="modal-close" onclick="closeModal('coach-tip-modal')">&#x2715;</button>
+    <div class="modal-title">&#x1F916; Today's Insight</div>
+    <div id="coach-tip-content" class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<script src="/static/js/app.js?v=3.1"></script>
+<script>if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
 </body>
 </html>

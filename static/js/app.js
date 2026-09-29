@@ -1,1583 +1,2088 @@
 /**
- * NutriVision India — Application JavaScript Engine
- * Architecture: Clean, Modular, Functional, Robust
+ * NutriVision India v3.0 — Unified Client Application
+ * Clean, lightweight, modular architecture.
+ * Perfectly mapped to Flask backend endpoints.
  */
 
-// ==========================================
-// 1. STATE & INITIALIZATION
-// ==========================================
+// ── GLOBAL STATE ──────────────────────────────────────────────────
 const AppState = {
   userId: 'nv_user',
   profile: null,
   diaryDate: new Date().toISOString().split('T')[0],
   diaryTotals: { calories: 0, protein: 0, carbs: 0, fat: 0 },
-  waterML: 0,
-  waterTargetML: 3000,
-  
-  // Scanner State
+  waterGL: 0,
   currentFile: null,
   currentFoodName: '',
   currentNutrition: {},
   currentMealType: 'breakfast',
-  
-  // Profile Form State
-  selectedGoal: 'fat_loss',
-  selectedActivity: 'moderate',
-  
-  // Barcode & OCR State
-  barcodeNutrition: {},
-  barcodeRunning: false,
-  barcodeStream: null,
-  barcodeVideoTrack: null,
-  isTorchOn: false,
-  barcodeAnimFrame: null,
-  
-  // Live Camera State
-  liveCameraStream: null,
-  liveFacingMode: 'environment',
-  
-  // Search State
   searchCategory: 'all',
   searchTimer: null,
-  
-  // Coach State
   geminiKey: localStorage.getItem('nv_gemini_key') || '',
   coachHistory: [],
   isCoachReplying: false
 };
+window.AppState = AppState;
 
-// Initialize Native Barcode Detector if supported
-let nativeBarcodeDetector = null;
-if ('BarcodeDetector' in window) {
-  try {
-    nativeBarcodeDetector = new BarcodeDetector({
-      formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code']
-    });
-  } catch (e) {
-    nativeBarcodeDetector = null;
-  }
+// ── TOAST NOTIFICATION ────────────────────────────────────────────
+function showToast(message, isError = false) {
+  const toast = document.getElementById('app-toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.className = 'toast show ' + (isError ? 'error' : 'success');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 3000);
 }
 
-// Window Load Handler
-window.addEventListener('DOMContentLoaded', () => {
-  initProfile();
-  initDateHeaders();
-  loadDashboard();
-  loadWaterData();
-  checkGeminiKeyStatus();
-  setupDropzone();
+// ── MODAL HELPERS ─────────────────────────────────────────────────
+function openModal(id) {
+  const m = document.getElementById(id);
+  if (m) m.classList.add('open');
+}
+
+function closeModal(id) {
+  const m = document.getElementById(id);
+  if (m) m.classList.remove('open');
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('modal-bg')) {
+    e.target.classList.remove('open');
+  }
 });
 
-// ==========================================
-// 2. NAVIGATION MANAGEMENT
-// ==========================================
-function showScreen(screenName) {
-  // Update Screens
-  document.querySelectorAll('.screen-view').forEach(s => s.classList.remove('active'));
-  const targetScreen = document.getElementById('screen-' + screenName);
-  if (targetScreen) targetScreen.classList.add('active');
+// ── TAB NAVIGATION ────────────────────────────────────────────────
+function switchTab(name) {
+  try {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    const pane = document.getElementById('tab-' + name);
+    if (pane) pane.classList.add('active');
 
-  // Update Desktop Navigation
-  document.querySelectorAll('.nav-link-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.screen === screenName);
-  });
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+    const navBtn = document.getElementById('nav-' + name);
+    if (navBtn) navBtn.classList.add('active');
 
-  // Update Mobile Navigation
-  document.querySelectorAll('.mobile-nav-item').forEach(item => {
-    item.classList.toggle('active', item.dataset.screen === screenName);
-  });
-
-  // Screen specific data refresh
-  if (screenName === 'home') loadDashboard();
-  if (screenName === 'history') loadHistoryTimeline();
-  if (screenName === 'coach') loadCoachScreen();
-  if (screenName === 'foodlog') {
-    AppState.searchCategory = 'all';
-    performFoodSearch('', 'all');
-  }
-  // Legacy: scanner / nutrition redirect to foodlog
-  if (screenName === 'scanner') { showScreen('foodlog'); setFoodLogTab('scan'); return; }
-  if (screenName === 'nutrition') { showScreen('foodlog'); setFoodLogTab('search'); return; }
-
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// ============ FOOD LOG TABS ============
-function setFoodLogTab(tab) {
-  // Activate the correct tab button
-  ['scan', 'search', 'barcode'].forEach(t => {
-    const btn = document.getElementById('tab-btn-' + t);
-    const panel = document.getElementById('foodlog-panel-' + t);
-    if (btn) btn.classList.toggle('active', t === tab);
-    if (panel) panel.style.display = (t === tab) ? '' : 'none';
-  });
-
-  // Auto-load search results when switching to search tab
-  if (tab === 'search') {
-    AppState.searchCategory = 'all';
-    performFoodSearch('', 'all');
-  }
-}
-
-// Start barcode scanner inline in the Food Log barcode tab
-function startInlineBarcodeScanner() {
-  const viewport = document.getElementById('barcode-inline-viewport');
-  if (!viewport) return;
-  // Reuse existing Quagga barcode scanner, pointing to inline viewport
-  if (window.QuaggaActive) { Quagga.stop(); window.QuaggaActive = false; }
-  Quagga.init({
-    inputStream: {
-      name: 'Live',
-      type: 'LiveStream',
-      target: viewport,
-      constraints: { facingMode: 'environment' }
-    },
-    decoder: { readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_128_reader'] }
-  }, function(err) {
-    if (err) { showToast('Camera error: ' + err.message, 'error'); return; }
-    Quagga.start();
-    window.QuaggaActive = true;
-  });
-  Quagga.offDetected();
-  Quagga.onDetected(function(result) {
-    const code = result.codeResult.code;
-    if (code) {
-      Quagga.stop(); window.QuaggaActive = false;
-      document.getElementById('manual-barcode-digits').value = code;
-      lookupManualBarcodeString();
+    if (name === 'home') {
+      loadDashboard();
+      renderWaterCups();
+    } else if (name === 'log') {
+      setLogTab('scan');
+      loadDiaryTab();
+    } else if (name === 'progress') {
+      loadProgressTab();
+    } else if (name === 'tools') {
+      setToolTab('favourites');
+    } else if (name === 'me') {
+      refreshMeTab();
     }
-  });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    console.error('switchTab error:', err);
+  }
 }
 
+function setLogTab(name) {
+  try {
+    document.querySelectorAll('#tab-log .inner-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('#tab-log .inner-pane').forEach(p => p.classList.remove('active'));
+    const btn = document.querySelector('#tab-log .inner-tab[data-t="' + name + '"]');
+    const pane = document.getElementById('logtab-' + name);
+    if (btn) btn.classList.add('active');
+    if (pane) pane.classList.add('active');
 
-
-function initDateHeaders() {
-  const now = new Date();
-  const options = { weekday: 'long', day: 'numeric', month: 'short' };
-  const dateStr = now.toLocaleDateString('en-IN', options);
-  
-  const dashDate = document.getElementById('dash-date-display');
-  if (dashDate) dashDate.textContent = dateStr;
-
-  const hour = now.getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const name = AppState.profile ? `, ${AppState.profile.name}` : '';
-  const greetEl = document.getElementById('dash-greeting-text');
-  if (greetEl) greetEl.textContent = `${greeting}${name}`;
-
-  updateHistoryDateHeader();
-}
-
-// ==========================================
-// 3. PROFILE & METABOLISM MANAGEMENT
-// ==========================================
-function initProfile() {
-  const saved = localStorage.getItem('nv_profile');
-  if (saved) {
-    try {
-      AppState.profile = JSON.parse(saved);
-      renderProfileState(true);
-    } catch (e) {
-      AppState.profile = null;
-      renderProfileState(false);
+    if (name === 'search') {
+      const input = document.getElementById('food-search-input');
+      const val = input ? input.value.trim() : '';
+      performFoodSearch(val, AppState.searchCategory || 'all');
+    } else if (name === 'diary') {
+      loadDiaryTab();
     }
-  } else {
-    renderProfileState(false);
+  } catch (err) {
+    console.error('setLogTab error:', err);
   }
 }
 
-function renderProfileState(hasProfile) {
-  const emptyBanner = document.getElementById('hero-profile-cta');
-  const dashStats = document.getElementById('dash-active-summary');
-  
-  if (hasProfile && AppState.profile) {
-    if (emptyBanner) emptyBanner.style.display = 'none';
-    if (dashStats) dashStats.style.display = 'block';
+function setToolTab(name) {
+  try {
+    document.querySelectorAll('#tools-pills .pill').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('#tab-tools .inner-pane').forEach(p => p.classList.remove('active'));
+    const pill = document.querySelector('#tools-pills .pill[data-tt="' + name + '"]');
+    const pane = document.getElementById('toolstab-' + name);
+    if (pill) pill.classList.add('active');
+    if (pane) pane.classList.add('active');
 
-    const goalMap = { fat_loss: 'Fat Loss 🔥', maintain: 'Maintenance ⚖️', muscle_gain: 'Muscle Gain 💪' };
-    const goalTag = document.getElementById('dash-plan-badge');
-    if (goalTag) goalTag.textContent = goalMap[AppState.profile.goal] || 'Custom Plan';
-
-    // Populate profile form values
-    const pName = document.getElementById('p-name');
-    if (pName) pName.value = AppState.profile.name || '';
-    const pAge = document.getElementById('p-age');
-    if (pAge) pAge.value = AppState.profile.age || '';
-    const pWeight = document.getElementById('p-weight');
-    if (pWeight) pWeight.value = AppState.profile.weight || '';
-    const pHeight = document.getElementById('p-height');
-    if (pHeight) pHeight.value = AppState.profile.height || '';
-    const pGender = document.getElementById('p-gender');
-    if (pGender) pGender.value = AppState.profile.gender || 'male';
-
-    selectGoal(AppState.profile.goal || 'fat_loss');
-    selectActivity(AppState.profile.activity || 'moderate');
-    renderTargetsOutput(AppState.profile.targets, AppState.profile.tdee);
-  } else {
-    if (emptyBanner) emptyBanner.style.display = 'block';
-    if (dashStats) dashStats.style.display = 'none';
+    if (name === 'favourites') loadFavourites();
+    else if (name === 'recipes') loadSavedRecipes();
+  } catch (err) {
+    console.error('setToolTab error:', err);
   }
 }
 
-function selectGoal(goal) {
-  AppState.selectedGoal = goal;
-  document.querySelectorAll('.goal-option-card').forEach(card => {
-    card.classList.toggle('active', card.dataset.goal === goal);
-  });
-}
+// ── GREETING & HEADER ─────────────────────────────────────────────
+function updateGreeting() {
+  const h = new Date().getHours();
+  const g = h < 12 ? 'Good morning 👋' : h < 17 ? 'Good afternoon 👋' : 'Good evening 👋';
+  const el = document.getElementById('home-greeting');
+  if (el) el.textContent = g;
 
-function selectActivity(act) {
-  AppState.selectedActivity = act;
-  document.querySelectorAll('.activity-option-card').forEach(card => {
-    card.classList.toggle('active', card.dataset.activity === act);
-  });
-}
-
-function calculateTDEE(weightKg, heightCm, age, gender, activity) {
-  // Mifflin-St Jeor / Harris-Benedict BMR Formula
-  const bmr = gender === 'male'
-    ? (10 * weightKg) + (6.25 * heightCm) - (5 * age) + 5
-    : (10 * weightKg) + (6.25 * heightCm) - (5 * age) - 161;
-  const multipliers = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725 };
-  return Math.round(bmr * (multipliers[activity] || 1.55));
-}
-
-function calculateTargets(tdee, goal, weightKg) {
-  let calories = tdee;
-  let proteinPerKg = 1.8;
-  
-  if (goal === 'fat_loss') {
-    calories = tdee - 500;
-    proteinPerKg = 2.2;
-  } else if (goal === 'muscle_gain') {
-    calories = tdee + 300;
-    proteinPerKg = 2.0;
+  const p = AppState.profile;
+  const hl = document.getElementById('home-headline');
+  if (hl) {
+    hl.textContent = p && p.name ? `Hey ${p.name}, let's track today` : "Let's track today";
   }
-
-  const proteinG = Math.round(proteinPerKg * weightKg);
-  const fatG = Math.round((calories * 0.25) / 9);
-  const carbsG = Math.max(0, Math.round((calories - (proteinG * 4) - (fatG * 9)) / 4));
-
-  return {
-    calories: Math.round(calories),
-    protein_g: proteinG,
-    fat_g: fatG,
-    carbs_g: carbsG
-  };
 }
 
-async function saveProfile() {
-  const name = (document.getElementById('p-name').value || '').trim();
-  const age = parseInt(document.getElementById('p-age').value);
-  const weight = parseFloat(document.getElementById('p-weight').value);
-  const height = parseFloat(document.getElementById('p-height').value);
-  const gender = document.getElementById('p-gender').value;
+// ── HOME DASHBOARD & CALORIE RING ─────────────────────────────────
+async function loadDashboard() {
+  updateGreeting();
+  const p = AppState.profile;
+  const cta = document.getElementById('hero-profile-cta');
+  const dash = document.getElementById('dash-active-summary');
 
-  if (!name || isNaN(age) || isNaN(weight) || isNaN(height)) {
-    showToast('Please enter all personal metrics.', true);
+  if (!p) {
+    if (cta) cta.style.display = 'block';
+    if (dash) dash.style.display = 'none';
+    loadHomeMealPreview();
+    updateHomeExercise();
     return;
   }
 
-  const tdee = calculateTDEE(weight, height, age, gender, AppState.selectedActivity);
-  const targets = calculateTargets(tdee, AppState.selectedGoal, weight);
+  if (cta) cta.style.display = 'none';
+  if (dash) dash.style.display = 'block';
 
-  AppState.profile = {
-    name,
-    age,
-    weight,
-    height,
-    gender,
-    goal: AppState.selectedGoal,
-    activity: AppState.selectedActivity,
-    tdee,
-    targets
-  };
-
-  localStorage.setItem('nv_profile', JSON.stringify(AppState.profile));
-
-  // Sync with backend API
   try {
-    await fetch('/api/save_profile', {
+    const res = await fetch(`/api/get_diary/${AppState.userId}?date=${AppState.diaryDate}`);
+    const data = await res.json();
+    const t = data.totals || { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    AppState.diaryTotals = t;
+
+    const targetCal = p.target_calories || (p.targets && p.targets.calories) || 2000;
+    const targetPro = p.target_protein || (p.targets && p.targets.protein_g) || 120;
+    const targetCarb = p.target_carbs || (p.targets && p.targets.carbs_g) || 250;
+    const targetFat = p.target_fat || (p.targets && p.targets.fat_g) || 65;
+
+    const eaten = Math.round(t.calories || 0);
+    const rem = Math.max(0, targetCal - eaten);
+
+    const setEl = (id, v) => {
+      const e = document.getElementById(id);
+      if (e) e.textContent = v;
+    };
+
+    setEl('dash-cal-remaining', rem);
+    setEl('dash-cal-eaten', eaten + ' kcal');
+    setEl('dash-cal-target', targetCal + ' kcal');
+
+    // Ring gauge — circumference 2 * pi * 46 ≈ 289
+    const circ = 289;
+    const pct = Math.min(1, eaten / targetCal);
+    const fill = document.getElementById('dash-gauge-fill');
+    if (fill) fill.style.strokeDashoffset = circ - (circ * pct);
+
+    // Macro bars
+    const pro = Math.round(t.protein || 0);
+    const carb = Math.round(t.carbs || 0);
+    const fat = Math.round(t.fat || 0);
+
+    const setBar = (barId, valId, v, target, unit) => {
+      const bar = document.getElementById(barId);
+      if (bar) bar.style.width = Math.min(100, Math.round((v / target) * 100)) + '%';
+      setEl(valId, `${v}${unit} / ${target}${unit}`);
+    };
+    setBar('dash-pro-bar', 'dash-pro-val', pro, targetPro, 'g');
+    setBar('dash-carb-bar', 'dash-carb-val', carb, targetCarb, 'g');
+    setBar('dash-fat-bar', 'dash-fat-val', fat, targetFat, 'g');
+
+    loadHomeMealPreview();
+    updateHomeExercise();
+  } catch (err) {
+    console.error('loadDashboard error:', err);
+  }
+}
+
+async function loadHomeMealPreview() {
+  const container = document.getElementById('home-meal-preview');
+  if (!container) return;
+
+  try {
+    const res = await fetch(`/api/get_diary/${AppState.userId}?date=${AppState.diaryDate}`);
+    const data = await res.json();
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+
+    if (!entries.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">🍽️</div><div class="empty-text">No meals logged yet today.<br>Tap <strong>Scan Food</strong> to start.</div></div>';
+      return;
+    }
+
+    const recent = entries.slice(-3).reverse();
+    container.innerHTML = recent.map(item => `
+      <div class="meal-item" style="margin-bottom:6px;">
+        <div class="meal-item-left">
+          <div class="mi-name">${escapeHtml(item.food || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</div>
+          <div class="mi-sub">${escapeHtml(item.meal_type || 'meal')} · ${item.portion || 100}g</div>
+        </div>
+        <span class="mi-cal">${Math.round(item.calories || 0)} kcal</span>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('loadHomeMealPreview error:', err);
+  }
+}
+
+async function updateHomeExercise() {
+  try {
+    const res = await fetch(`/api/get_exercise/${AppState.userId}?date=${AppState.diaryDate}`);
+    const data = await res.json();
+    const burned = data.total_burned || 0;
+    const net = data.net_calories !== undefined ? data.net_calories : (AppState.diaryTotals.calories - burned);
+
+    const bEl = document.getElementById('home-burned');
+    if (bEl) bEl.textContent = burned;
+
+    const nEl = document.getElementById('home-net');
+    if (nEl) nEl.textContent = net + ' kcal';
+  } catch (err) {
+    console.error('updateHomeExercise error:', err);
+  }
+}
+
+// ── WATER TRACKER ─────────────────────────────────────────────────
+function renderWaterCups() {
+  const container = document.getElementById('water-cups-home');
+  if (!container) return;
+  const filled = AppState.waterGL || 0;
+
+  container.innerHTML = Array.from({ length: 8 }, (_, i) => `
+    <div class="water-cup ${i < filled ? 'filled' : ''}" onclick="toggleWaterCup(${i})" title="Glass ${i + 1}">💧</div>
+  `).join('');
+
+  const countEl = document.getElementById('water-count-home');
+  if (countEl) countEl.textContent = `${filled} / 8`;
+}
+
+async function toggleWaterCup(index) {
+  const filled = AppState.waterGL || 0;
+  AppState.waterGL = (index < filled && index === filled - 1) ? index : index + 1;
+  renderWaterCups();
+
+  try {
+    await fetch('/api/log_water', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         user_id: AppState.userId,
-        name,
-        age,
-        weight,
-        height,
-        gender,
-        goal: AppState.selectedGoal,
-        activity: AppState.selectedActivity
+        date: AppState.diaryDate,
+        action: 'set',
+        amount_ml: AppState.waterGL * 250
       })
     });
   } catch (e) {}
-
-  renderTargetsOutput(targets, tdee);
-  renderProfileState(true);
-  initDateHeaders();
-  loadDashboard();
-  showToast('Profile & daily targets saved! 🎯');
 }
 
-function renderTargetsOutput(targets, tdee) {
-  const targetCard = document.getElementById('profile-targets-card');
-  if (!targetCard) return;
-
-  document.getElementById('out-cal-target').textContent = targets.calories;
-  document.getElementById('out-pro-target').textContent = targets.protein_g + 'g';
-  document.getElementById('out-car-target').textContent = targets.carbs_g + 'g';
-  document.getElementById('out-fat-target').textContent = targets.fat_g + 'g';
-
-  const w = AppState.profile ? AppState.profile.weight : 70;
-  const h = AppState.profile ? AppState.profile.height : 175;
-  const bmi = (w / ((h / 100) * (h / 100))).toFixed(1);
-  const bmiCategory = bmi < 18.5 ? 'Underweight' : bmi < 23.0 ? 'Normal (Asian Indian)' : bmi < 25.0 ? 'Overweight' : 'Obese';
-
-  document.getElementById('out-bmi-val').textContent = `${bmi} (${bmiCategory})`;
-  document.getElementById('out-tdee-val').textContent = `${tdee} kcal/day`;
-
-  targetCard.style.display = 'block';
-}
-
-function resetProfile() {
-  if (confirm('Reset your profile and nutrition goals?')) {
-    localStorage.removeItem('nv_profile');
-    AppState.profile = null;
-    renderProfileState(false);
-    document.getElementById('profile-targets-card').style.display = 'none';
-    showToast('Profile data cleared.');
-  }
-}
-
-// ==========================================
-// 4. DASHBOARD & NUTRITION TRACKING
-// ==========================================
-async function loadDashboard() {
-  if (!AppState.profile) return;
-  try {
-    const res = await fetch(`/api/get_diary/${AppState.userId}?date=${AppState.diaryDate}`);
-    const data = await res.json();
-    AppState.diaryTotals = data.totals || { calories: 0, protein: 0, carbs: 0, fat: 0 };
-    renderDashboardStats(AppState.diaryTotals);
-  } catch (e) {
-    renderDashboardStats({ calories: 0, protein: 0, carbs: 0, fat: 0 });
-  }
-}
-
-function renderDashboardStats(totals) {
-  if (!AppState.profile) return;
-  const targets = AppState.profile.targets || { calories: 2000, protein_g: 120, carbs_g: 220, fat_g: 55 };
-  
-  const eatenCal = Math.round(totals.calories || 0);
-  const targetCal = targets.calories;
-  const remCal = Math.max(0, targetCal - eatenCal);
-
-  document.getElementById('dash-cal-eaten').textContent = eatenCal;
-  document.getElementById('dash-cal-target').textContent = targetCal;
-  document.getElementById('dash-cal-remaining').textContent = remCal;
-
-  // Render SVG Circular Gauge (Circumference ~414.7)
-  const ringCircumference = 414.7;
-  const pctCal = Math.min(1, eatenCal / targetCal);
-  const strokeOffset = ringCircumference - (ringCircumference * pctCal);
-  const gaugeFill = document.getElementById('dash-gauge-fill');
-  if (gaugeFill) gaugeFill.style.strokeDashoffset = strokeOffset;
-
-  // Render Macro Bars
-  const pct = (val, max) => Math.min(100, Math.round((val / max) * 100));
-  document.getElementById('dash-pro-fill').style.width = pct(totals.protein || 0, targets.protein_g) + '%';
-  document.getElementById('dash-car-fill').style.width = pct(totals.carbs || 0, targets.carbs_g) + '%';
-  document.getElementById('dash-fat-fill').style.width = pct(totals.fat || 0, targets.fat_g) + '%';
-
-  document.getElementById('dash-pro-nums').textContent = `${Math.round(totals.protein || 0)} / ${targets.protein_g}g`;
-  document.getElementById('dash-car-nums').textContent = `${Math.round(totals.carbs || 0)} / ${targets.carbs_g}g`;
-  document.getElementById('dash-fat-nums').textContent = `${Math.round(totals.fat || 0)} / ${targets.fat_g}g`;
-
-  // Status message
-  const diff = eatenCal - targetCal;
-  const statusBox = document.getElementById('dash-status-box');
-  const statusTitle = document.getElementById('dash-status-title');
-  const statusDesc = document.getElementById('dash-status-desc');
-
-  if (eatenCal === 0) {
-    if (statusTitle) statusTitle.textContent = 'Log your meals to start tracking today.';
-    if (statusDesc) statusDesc.textContent = 'Your calorie and macro balance will update dynamically.';
-  } else if (diff > 100) {
-    if (statusTitle) statusTitle.textContent = `Caloric Surplus: +${diff} kcal`;
-    if (statusDesc) statusDesc.textContent = AppState.profile.goal === 'muscle_gain' ? 'Optimal for muscle building.' : 'Consider lighter meals for the rest of today.';
-  } else if (diff < -100) {
-    if (statusTitle) statusTitle.textContent = `Caloric Deficit: ${Math.abs(diff)} kcal left`;
-    if (statusDesc) statusDesc.textContent = AppState.profile.goal === 'fat_loss' ? 'On track for steady fat loss.' : 'Fuel up with protein or complex carbs to hit target.';
-  } else {
-    if (statusTitle) statusTitle.textContent = 'On Target: Balanced intake';
-    if (statusDesc) statusDesc.textContent = 'You are hitting your daily nutritional budget perfectly.';
-  }
-}
-
-// ==========================================
-// 5. HYDRATION TRACKING
-// ==========================================
 async function loadWaterData() {
   try {
     const res = await fetch(`/api/get_water/${AppState.userId}?date=${AppState.diaryDate}`);
     const data = await res.json();
-    AppState.waterML = data.water_ml || 0;
-    renderWaterUI(AppState.waterML);
+    const ml = data.water_ml || 0;
+    AppState.waterGL = Math.min(8, Math.round(ml / 250));
+    renderWaterCups();
   } catch (e) {
-    renderWaterUI(0);
+    renderWaterCups();
   }
 }
 
-function renderWaterUI(ml) {
-  AppState.waterML = ml;
-  const target = AppState.waterTargetML;
-  const glasses = Math.round(ml / 250);
-  const pct = Math.min(100, Math.round((ml / target) * 100));
+// ── FOOD IMAGE SCANNER ────────────────────────────────────────────
+function handleScanFile(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
 
-  const countEl = document.getElementById('water-count-display');
-  if (countEl) countEl.textContent = `${ml} / ${target} ml (${glasses} glasses)`;
-
-  const fillEl = document.getElementById('water-gauge-fill');
-  if (fillEl) fillEl.style.width = `${pct}%`;
-}
-
-async function addWater(amount) {
-  try {
-    const res = await fetch('/api/log_water', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: AppState.userId, date: AppState.diaryDate, amount_ml: amount, action: 'add' })
-    });
-    const data = await res.json();
-    if (data.success) {
-      renderWaterUI(data.water_ml);
-      showToast(amount > 0 ? `Logged +${amount} ml water 💧` : `Updated: ${data.water_ml} ml`);
-    }
-  } catch (e) {}
-}
-
-async function resetWater() {
-  try {
-    const res = await fetch('/api/log_water', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: AppState.userId, date: AppState.diaryDate, action: 'reset' })
-    });
-    const data = await res.json();
-    if (data.success) {
-      renderWaterUI(0);
-      showToast('Hydration counter reset.');
-    }
-  } catch (e) {}
-}
-
-// ==========================================
-// 6. FOOD SCANNER (AI VISION & ENSEMBLE)
-// ==========================================
-function setupDropzone() {
-  const dropzone = document.getElementById('scanner-dropzone');
-  if (!dropzone) return;
-
-  ['dragenter', 'dragover'].forEach(eventName => {
-    dropzone.addEventListener(eventName, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dropzone.classList.add('drag-over');
-    });
-  });
-
-  ['dragleave', 'drop'].forEach(eventName => {
-    dropzone.addEventListener(eventName, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dropzone.classList.remove('drag-over');
-    });
-  });
-
-  dropzone.addEventListener('drop', (e) => {
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      AppState.currentFile = files[0];
-      analyzeUploadedFood();
-    }
-  });
-}
-
-function handleFileInput(e) {
-  const file = e.target.files[0];
-  if (file) {
-    AppState.currentFile = file;
-    analyzeUploadedFood();
+  AppState.currentFile = file;
+  const preview = document.getElementById('scan-preview-img');
+  if (preview) {
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = 'block';
   }
+
+  const zone = document.getElementById('scan-zone');
+  if (zone) zone.style.borderStyle = 'solid';
+
+  const btn = document.getElementById('btn-analyze');
+  if (btn) btn.style.display = 'flex';
+
+  const res = document.getElementById('scan-result');
+  if (res) res.style.display = 'none';
+
+  const analyzing = document.getElementById('scan-analyzing');
+  if (analyzing) analyzing.style.display = 'none';
 }
 
-async function analyzeUploadedFood() {
-  if (!AppState.currentFile) return;
+async function analyzeFood() {
+  if (!AppState.currentFile) {
+    showToast('Upload or snap a food photo first.', true);
+    return;
+  }
 
-  const dropzone = document.getElementById('scanner-dropzone');
-  const loading = document.getElementById('scanner-analyzing-card');
-  const result = document.getElementById('scanner-result-card');
+  const btn = document.getElementById('btn-analyze');
+  const analyzing = document.getElementById('scan-analyzing');
+  const resultDiv = document.getElementById('scan-result');
 
-  if (dropzone) dropzone.style.display = 'none';
-  if (loading) loading.style.display = 'block';
-  if (result) result.style.display = 'none';
-
-  // Preview local image
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const imgEl = document.getElementById('result-image-element');
-    if (imgEl) imgEl.src = ev.target.result;
-  };
-  reader.readAsDataURL(AppState.currentFile);
-
-  const fd = new FormData();
-  fd.append('file', AppState.currentFile);
+  if (btn) btn.style.display = 'none';
+  if (analyzing) analyzing.style.display = 'block';
+  if (resultDiv) resultDiv.style.display = 'none';
 
   try {
+    const fd = new FormData();
+    fd.append('file', AppState.currentFile);
+    fd.append('user_id', AppState.userId);
+
     const res = await fetch('/analyze', { method: 'POST', body: fd });
     const data = await res.json();
-    if (loading) loading.style.display = 'none';
 
-    if (res.ok && data.predictions && data.predictions.length > 0) {
-      renderScanPrediction(data);
-    } else {
-      showToast(data.error || 'Could not recognize meal. Try manual search.', true);
-      resetScanner();
+    if (analyzing) analyzing.style.display = 'none';
+
+    if (!res.ok || data.error) {
+      showToast(data.error || 'Could not identify dish.', true);
+      if (btn) btn.style.display = 'flex';
+      return;
     }
+
+    const foodName = data.food_name || (data.predictions && data.predictions[0] && data.predictions[0].food) || 'Indian Dish';
+    const nut = data.nutrition || { calories_per_100g: 150, protein: 4, carbs: 20, fat: 5 };
+    const aiSource = data.ai_source || 'pytorch_ensemble';
+    const isGemini = aiSource === 'gemini_vision';
+    const isVerified = data.ai_verified === true;
+    const pytorchConf = data.pytorch_confidence || 0;
+    const predictions = data.predictions || [];
+
+    AppState.currentFoodName = foodName;
+    AppState.currentNutrition = nut;
+
+    // ── Food Name ──
+    const nameEl = document.getElementById('result-food-name');
+    if (nameEl) nameEl.textContent = foodName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    // ── AI Description ──
+    const descEl = document.getElementById('result-ai-desc');
+    const desc = data.gemini_description || nut.notes || '';
+    if (descEl && desc) {
+      descEl.textContent = desc;
+      descEl.style.display = 'block';
+    } else if (descEl) {
+      descEl.style.display = 'none';
+    }
+
+    // ── Badge Row ──
+    const badgesRow = document.getElementById('result-badges-row');
+    if (badgesRow) {
+      const badges = [];
+
+      // Gemini Verified badge with model confidence
+      if (isGemini) {
+        const modelConf = pytorchConf > 0 ? `Models: ${pytorchConf.toFixed(1)}%` : 'Gemini Verified';
+        badges.push(`<span class="ai-badge ai-badge-verified">✅ Gemini Verified (${modelConf})</span>`);
+        badges.push(`<span class="ai-badge ai-badge-verified">+ AI Verified</span>`);
+        badges.push(`<span class="ai-badge ai-badge-gemini">✦ Gemini Vision</span>`);
+      } else {
+        // PyTorch-only result
+        const conf = pytorchConf > 0 ? pytorchConf.toFixed(1) : (predictions[0] ? parseFloat(predictions[0].confidence) : 0);
+        badges.push(`<span class="ai-badge ai-badge-pytorch">🤖 PyTorch Ensemble</span>`);
+        if (conf > 0) badges.push(`<span class="ai-badge ai-badge-conf">📊 ${conf}% Confidence</span>`);
+      }
+
+      badgesRow.innerHTML = badges.join('');
+    }
+
+    // ── Predictions Section ──
+    const predsSection = document.getElementById('result-predictions-section');
+    const ensembleChips = document.getElementById('result-ensemble-chips');
+    const geminiMatchDiv = document.getElementById('result-gemini-match');
+    const geminiChip = document.getElementById('result-gemini-chip');
+
+    if (predictions.length > 0) {
+      if (predsSection) predsSection.style.display = 'block';
+
+      // Gemini top match chip (shown in "Other Likely Matches")
+      const geminiPred = predictions.find(p => p.source === 'gemini_vision');
+      if (geminiMatchDiv && geminiChip && geminiPred) {
+        geminiChip.innerHTML = `✦ Gemini Vision &nbsp;<strong>${escapeHtml((geminiPred.display || geminiPred.food || '').replace(/_/g,' ').toUpperCase())}</strong>`;
+        geminiMatchDiv.style.display = 'block';
+      } else if (geminiMatchDiv) {
+        geminiMatchDiv.style.display = 'none';
+      }
+
+      // Ensemble chips — show pytorch predictions
+      if (ensembleChips) {
+        const pytorchPreds = predictions.filter(p => p.source === 'pytorch' || !p.source || p.source === 'pytorch_ensemble');
+        const toShow = pytorchPreds.length ? pytorchPreds : predictions;
+        ensembleChips.innerHTML = toShow.slice(0, 5).map((p, i) => {
+          const label = (p.food || '').replace(/_/g, ' ').toUpperCase();
+          const conf = p.confidence || '0%';
+          return `<div class="ensemble-chip${i === 0 ? ' top' : ''}">${escapeHtml(label)} <span style="opacity:.6;font-size:.65rem;">(${conf})</span></div>`;
+        }).join('');
+      }
+    } else {
+      if (predsSection) predsSection.style.display = 'none';
+    }
+
+    // Reset slider
+    const slider = document.getElementById('portion-slider-input');
+    if (slider) slider.value = nut.portion_estimate_g || 100;
+    updateScanResult(nut.portion_estimate_g || 100);
+
+    if (resultDiv) resultDiv.style.display = 'block';
   } catch (err) {
-    if (loading) loading.style.display = 'none';
-    showToast('Analysis error. Please check server connection.', true);
-    resetScanner();
+    console.error('analyzeFood error:', err);
+    if (analyzing) analyzing.style.display = 'none';
+    if (btn) btn.style.display = 'flex';
+    showToast('Analysis failed. Try again.', true);
   }
 }
 
-function renderScanPrediction(data) {
-  const resultCard = document.getElementById('scanner-result-card');
-  if (!resultCard) return;
-  resultCard.style.display = 'block';
-
-  const top = data.predictions[0];
-  AppState.currentFoodName = top.food;
-  AppState.currentNutrition = data.nutrition || {};
-
-  // ── Food name: prefer Gemini display name ──
-  const displayName = data.food_display || top.food.replace(/_/g, ' ');
-  document.getElementById('result-dish-title').textContent = displayName;
-
-  // ── AI Verified badge ──
-  const aiBadge = document.getElementById('ai-verified-badge');
-  if (aiBadge) {
-    aiBadge.style.display = data.ai_verified ? 'inline-flex' : 'none';
-  }
-
-  // ── AI Source badge (PyTorch vs Gemini) ──
-  const aiSource = data.ai_source;
-  const badgeEl = document.getElementById('ai-source-badge');
-  if (badgeEl) {
-    if (aiSource === 'gemini_vision') {
-      badgeEl.innerHTML =
-        '<span style="background:#7c3aed;color:white;font-size:0.7rem;padding:3px 12px;border-radius:99px;font-weight:700;">🤖 Gemini Vision</span>';
-    } else {
-      badgeEl.innerHTML =
-        '<span style="background:#1d4ed8;color:white;font-size:0.7rem;padding:3px 12px;border-radius:99px;font-weight:700;">🧠 PyTorch AI (3 Models)</span>';
-    }
-  }
-
-  // ── Gemini description if available ──
-  const geminiDescEl = document.getElementById('gemini-desc');
-  if (geminiDescEl) {
-    if (data.gemini_description) {
-      geminiDescEl.textContent = data.gemini_description;
-      geminiDescEl.style.display = 'block';
-    } else {
-      geminiDescEl.style.display = 'none';
-    }
-  }
-
-  // ── Confidence label (based on PyTorch confidence, not Gemini) ──
-  const confBadge = document.getElementById('result-confidence-badge');
-  if (confBadge) {
-    const pytorchConf = parseFloat(data.pytorch_confidence) || 0;
-    if (data.ai_source === 'gemini_vision') {
-      confBadge.textContent = pytorchConf >= 75
-        ? `✅ Gemini Verified (Models: ${pytorchConf.toFixed(1)}%)`
-        : `🔍 Gemini Identified (Models: ${pytorchConf.toFixed(1)}% — Low Confidence)`;
-      confBadge.style.background = pytorchConf >= 75 ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)';
-      confBadge.style.color = pytorchConf >= 75 ? '#10b981' : '#f59e0b';
-    } else {
-      confBadge.textContent = pytorchConf >= 75
-        ? `High Confidence: ${pytorchConf.toFixed(1)}%`
-        : `Likely Match: ${pytorchConf.toFixed(1)}%`;
-      confBadge.style.background = '';
-      confBadge.style.color = '';
-    }
-  }
-
-  // ── Visual portion estimate (from Gemini) ──
-  const portionEstRow = document.getElementById('ai-portion-estimate-row');
-  const portionEstVal = document.getElementById('ai-portion-estimate-val');
-  if (portionEstRow && portionEstVal) {
-    if (data.ai_verified && data.portion_estimate_g) {
-      portionEstVal.textContent = `~${data.portion_estimate_g}g`;
-      portionEstRow.style.display = 'block';
-    } else {
-      portionEstRow.style.display = 'none';
-    }
-  }
-
-  // ── AI insight note ──
-  const aiNoteEl = document.getElementById('ai-insight-note');
-  if (aiNoteEl) {
-    if (data.ai_verified && data.ai_notes) {
-      aiNoteEl.textContent = `🧠 ${data.ai_notes}`;
-      aiNoteEl.style.display = 'block';
-    } else {
-      aiNoteEl.style.display = 'none';
-    }
-  }
-
-  // ── Render Alternative Predictions (Gemini + PyTorch 3 models) ──
-  const altContainer = document.getElementById('alt-predictions-container');
-  if (altContainer) {
-    const pytorchConf = parseFloat(data.pytorch_confidence) || 0;
-    // Separate Gemini prediction from PyTorch predictions
-    const geminiPreds = data.predictions.filter(p => p.source === 'gemini_vision');
-    const pytorchPreds = data.predictions.filter(p => p.source === 'pytorch' || p.source === 'pytorch_ensemble' || !p.source);
-
-    let html = '';
-
-    // Gemini chip (if present)
-    geminiPreds.forEach((p, i) => {
-      const label = (p.display || p.food.replace(/_/g, ' ')).replace(/\b\w/g, c => c.toUpperCase());
-      html += `
-        <button type="button" class="alt-pred-chip active" onclick="switchActivePrediction('${p.food}', this)" title="Identified by Gemini Vision AI">
-          <span style="font-size:0.65rem;opacity:0.7;display:block;margin-bottom:1px;">🤖 Gemini Vision</span>
-          <span>${label.toUpperCase()}</span>
-        </button>`;
-    });
-
-    // PyTorch model chips — always shown, with low-confidence warning if needed
-    if (pytorchPreds.length > 0) {
-      html += `<div style="width:100%;font-size:0.68rem;color:var(--text-secondary);margin:6px 0 3px;letter-spacing:0.05em;">🧠 3-MODEL ENSEMBLE PREDICTIONS${pytorchConf < 75 ? ' <span style="color:#f59e0b">(Low Confidence)</span>' : ''}</div>`;
-      pytorchPreds.forEach((p, i) => {
-        const label = p.food.replace(/_/g, ' ').toUpperCase();
-        html += `
-          <button type="button" class="alt-pred-chip" onclick="switchActivePrediction('${p.food}', this)" title="Predicted by PyTorch 3-Model Ensemble">
-            <span>${label}</span>
-            <span style="opacity:0.75;">(${p.confidence})</span>
-          </button>`;
-      });
-    }
-
-    altContainer.innerHTML = html;
-  }
-
-  // ── Portion slider: pre-set to Gemini visual estimate if available ──
-  const portionGrams = (data.ai_verified && data.portion_estimate_g)
-    ? Math.min(500, Math.max(25, data.portion_estimate_g))
-    : 100;
-  const sliderEl = document.getElementById('portion-slider-input');
-  if (sliderEl) sliderEl.value = portionGrams;
-  updatePortionMetrics(portionGrams);
-
-  // Clear active state on all preset buttons (slider moved by AI)
-  document.querySelectorAll('.preset-chip-btn').forEach(btn => btn.classList.remove('active'));
-
-  // ── Nutrition Guidance tags ──
-  const n = data.nutrition || {};
-  const notesContainer = document.getElementById('result-diet-notes');
-  if (notesContainer) {
-    const notes = [];
-    if (n.protein >= 8) notes.push('💪 Excellent Protein Source');
-    if ((n.calories_per_100g || 0) < 150) notes.push('🥗 Low Calorie Density');
-    if ((n.calories_per_100g || 0) > 280) notes.push('⚠️ Calorie Dense Dish');
-    if (data.health_score >= 8) notes.push('🌿 Very Healthy Choice');
-    else if (data.health_score && data.health_score <= 4) notes.push('⚠️ Eat in Moderation');
-    if (!data.ai_verified && n.notes) notes.push(`📋 ${n.notes}`);
-
-    notesContainer.innerHTML = notes.map(note => `
-      <div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:4px;">${note}</div>
-    `).join('');
-  }
-
-  resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-async function switchActivePrediction(foodKey, btnEl) {
-  document.querySelectorAll('.alt-pred-chip').forEach(b => b.classList.remove('active'));
-  if (btnEl) btnEl.classList.add('active');
-
-  AppState.currentFoodName = foodKey;
-  document.getElementById('result-dish-title').textContent = foodKey.replace(/_/g, ' ');
-
-  try {
-    const res = await fetch(`/api/search_food?q=${encodeURIComponent(foodKey)}`);
-    const data = await res.json();
-    if (data.results && data.results.length > 0) {
-      AppState.currentNutrition = data.results[0];
-      updatePortionMetrics(document.getElementById('portion-slider-input').value);
-    }
-  } catch (e) {}
-}
-
-function setPortionPreset(grams, btnEl) {
-  document.querySelectorAll('.preset-chip-btn').forEach(b => b.classList.remove('active'));
-  if (btnEl) btnEl.classList.add('active');
-
-  const slider = document.getElementById('portion-slider-input');
-  if (slider) slider.value = grams;
-  updatePortionMetrics(grams);
-}
-
-function updatePortionMetrics(grams) {
-  const g = parseInt(grams) || 100;
-  const label = document.getElementById('portion-display-label');
-  if (label) label.textContent = `${g}g`;
-
-  const factor = g / 100;
+function updateScanResult(portion) {
   const n = AppState.currentNutrition || {};
+  const factor = (portion || 100) / 100;
 
-  document.getElementById('metric-val-cal').textContent = Math.round((n.calories_per_100g || 0) * factor);
-  document.getElementById('metric-val-pro').textContent = Math.round((n.protein || 0) * factor * 10) / 10 + 'g';
-  document.getElementById('metric-val-car').textContent = Math.round((n.carbs || 0) * factor * 10) / 10 + 'g';
-  document.getElementById('metric-val-fat').textContent = Math.round((n.fat || 0) * factor * 10) / 10 + 'g';
+  const cal = Math.round((n.calories_per_100g || 0) * factor);
+  const pro = Math.round((n.protein || 0) * factor * 10) / 10;
+  const carb = Math.round((n.carbs || 0) * factor * 10) / 10;
+  const fat = Math.round((n.fat || 0) * factor * 10) / 10;
+
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = v;
+  };
+  setVal('portion-display', `${portion}g`);
+  // Correct IDs matching the HTML: r-cal, r-pro, r-car, r-fat
+  setVal('r-cal', cal);
+  setVal('r-pro', pro + 'g');
+  setVal('r-car', carb + 'g');
+  setVal('r-fat', fat + 'g');
 }
 
-function setMealType(meal, btnEl) {
-  AppState.currentMealType = meal;
-  document.querySelectorAll('.meal-type-pill').forEach(b => {
-    b.classList.toggle('active', b.dataset.meal === meal);
-  });
+function updatePortion(val) {
+  updateScanResult(parseInt(val, 10));
 }
 
-async function logScannedMealToDiary() {
-  const portion = parseInt(document.getElementById('portion-slider-input').value) || 100;
+function selectMealType(el, type) {
+  // Pills are in logtab-scan, not inside scan-result
+  document.querySelectorAll('#logtab-scan .pill[data-meal]').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  AppState.currentMealType = type;
+}
+
+async function saveCurrentAsFavourite() {
+  if (!AppState.currentFoodName) {
+    showToast('No food scanned yet.', true);
+    return;
+  }
+  const portion = parseInt(document.getElementById('portion-slider-input')?.value || '100', 10);
   const factor = portion / 100;
   const n = AppState.currentNutrition || {};
+  const name = AppState.currentFoodName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-  const payload = {
-    user_id: AppState.userId,
-    food: AppState.currentFoodName,
-    portion: portion,
-    calories: Math.round((n.calories_per_100g || 0) * factor),
-    protein: Math.round((n.protein || 0) * factor * 10) / 10,
-    carbs: Math.round((n.carbs || 0) * factor * 10) / 10,
-    fat: Math.round((n.fat || 0) * factor * 10) / 10,
-    meal_type: AppState.currentMealType,
-    date: AppState.diaryDate
-  };
+  try {
+    const res = await fetch('/api/save_favourite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        name: name,
+        food: AppState.currentFoodName,
+        display_name: name,
+        portion: portion,
+        calories: Math.round((n.calories_per_100g || 0) * factor),
+        protein: Math.round((n.protein || 0) * factor * 10) / 10,
+        carbs: Math.round((n.carbs || 0) * factor * 10) / 10,
+        fat: Math.round((n.fat || 0) * factor * 10) / 10,
+        meal_type: AppState.currentMealType || 'lunch'
+      })
+    });
+    const d = await res.json();
+    if (d.success) showToast(`⭐ Saved "${name}" as favourite!`);
+    else showToast('Could not save favourite.', true);
+  } catch (e) {
+    showToast('Save failed.', true);
+  }
+}
+
+async function logScannedFood() {
+  if (!AppState.currentFoodName) return;
+  const portion = parseInt(document.getElementById('portion-slider-input')?.value || '100', 10);
+  const factor = portion / 100;
+  const n = AppState.currentNutrition || {};
 
   try {
     const res = await fetch('/api/log_meal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        date: AppState.diaryDate,
+        food: AppState.currentFoodName,
+        portion: portion,
+        calories: Math.round((n.calories_per_100g || 0) * factor),
+        protein: Math.round((n.protein || 0) * factor * 10) / 10,
+        carbs: Math.round((n.carbs || 0) * factor * 10) / 10,
+        fat: Math.round((n.fat || 0) * factor * 10) / 10,
+        meal_type: AppState.currentMealType
+      })
     });
     const data = await res.json();
     if (data.success) {
-      showToast('Meal added to daily history! ✅');
-      resetScanner();
-      setTimeout(() => showScreen('history'), 500);
+      showToast('Logged to diary! ✅');
+      const resCard = document.getElementById('scan-result');
+      if (resCard) resCard.style.display = 'none';
+      const preview = document.getElementById('scan-preview-img');
+      if (preview) preview.style.display = 'none';
+      const zone = document.getElementById('scan-zone');
+      if (zone) zone.style.borderStyle = 'dashed';
+      AppState.currentFile = null;
+      loadDashboard();
+    } else {
+      showToast('Could not save meal.', true);
     }
-  } catch (e) {
-    showToast('Failed to log meal. Check connection.', true);
+  } catch (err) {
+    showToast('Failed to log meal.', true);
   }
 }
 
-function resetScanner() {
-  const fileInput = document.getElementById('food-file-input');
-  if (fileInput) fileInput.value = '';
-  document.getElementById('scanner-dropzone').style.display = 'block';
-  document.getElementById('scanner-analyzing-card').style.display = 'none';
-  document.getElementById('scanner-result-card').style.display = 'none';
-  stopLiveCamera();
-  AppState.currentFile = null;
+// ── FOOD SEARCH & DATABASE ─────────────────────────────────────────
+function filterCategory(el, cat) {
+  document.querySelectorAll('#logtab-search .pill').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  AppState.searchCategory = cat;
+  const input = document.getElementById('food-search-input');
+  performFoodSearch(input ? input.value.trim() : '', cat);
 }
 
-/* LIVE CAMERA ENGINE */
-async function startLiveCamera() {
-  const wrapper = document.getElementById('live-camera-wrapper');
-  const dropzone = document.getElementById('scanner-dropzone');
-  const video = document.getElementById('live-camera-video');
-
-  try {
-    if (AppState.liveCameraStream) {
-      AppState.liveCameraStream.getTracks().forEach(t => t.stop());
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: AppState.liveFacingMode } },
-      audio: false
-    });
-    AppState.liveCameraStream = stream;
-    video.srcObject = stream;
-    wrapper.style.display = 'block';
-    dropzone.style.display = 'none';
-  } catch (e) {
-    showToast('Camera stream unavailable. Upload a photo instead.', true);
-  }
-}
-
-function stopLiveCamera() {
-  const wrapper = document.getElementById('live-camera-wrapper');
-  const dropzone = document.getElementById('scanner-dropzone');
-  if (AppState.liveCameraStream) {
-    AppState.liveCameraStream.getTracks().forEach(t => t.stop());
-    AppState.liveCameraStream = null;
-  }
-  if (wrapper) wrapper.style.display = 'none';
-  if (dropzone) dropzone.style.display = 'block';
-}
-
-function switchCameraFacing() {
-  AppState.liveFacingMode = AppState.liveFacingMode === 'environment' ? 'user' : 'environment';
-  startLiveCamera();
-}
-
-function captureCameraSnapshot() {
-  const video = document.getElementById('live-camera-video');
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth || 640;
-  canvas.height = video.videoHeight || 480;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  canvas.toBlob(blob => {
-    AppState.currentFile = new File([blob], 'snapshot.jpg', { type: 'image/jpeg' });
-    stopLiveCamera();
-    analyzeUploadedFood();
-  }, 'image/jpeg', 0.9);
-}
-
-// ==========================================
-// 7. FOOD SEARCH & NUTRITION DATABASE
-// ==========================================
-function onSearchInputChange(val) {
+function searchFood(query) {
   clearTimeout(AppState.searchTimer);
   AppState.searchTimer = setTimeout(() => {
-    performFoodSearch(val, AppState.searchCategory);
-  }, 350);
+    performFoodSearch(query, AppState.searchCategory || 'all');
+  }, 250);
 }
 
-function filterSearchCategory(category, btnEl) {
-  AppState.searchCategory = category;
-  document.querySelectorAll('.cat-filter-btn').forEach(b => b.classList.remove('active'));
-  if (btnEl) btnEl.classList.add('active');
-
-  const query = document.getElementById('search-text-input').value;
-  performFoodSearch(query, category);
-}
-
-function clearSearchField() {
-  const input = document.getElementById('search-text-input');
-  if (input) {
-    input.value = '';
-    performFoodSearch('', AppState.searchCategory);
-  }
-}
-
+let _searchResultsCache = [];
 async function performFoodSearch(query, category) {
   const container = document.getElementById('search-results-list');
   if (!container) return;
-  container.innerHTML = '<div style="padding:14px;color:var(--text-tertiary);font-size:0.85rem;">Searching database...</div>';
 
+  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   try {
-    const url = `/api/search_food?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category || 'all')}`;
+    const url = `/api/search_food?q=${encodeURIComponent(query || '')}&category=${encodeURIComponent(category || 'all')}`;
     const res = await fetch(url);
     const data = await res.json();
+    const items = data.results || [];
+    _searchResultsCache = items;
 
-    if (!data.results || data.results.length === 0) {
-      container.innerHTML = `
-        <div style="padding:24px;text-align:center;color:var(--text-secondary);">
-          <div style="font-size:1.8rem;margin-bottom:6px;">🔍</div>
-          <div style="font-weight:600;font-size:0.92rem;">No foods found</div>
-          <div style="font-size:0.8rem;color:var(--text-tertiary);margin-top:2px;">Try searching generic names like "dal", "paneer", "rice", or "roti"</div>
-        </div>
-      `;
+    if (!items.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">No matching foods found.<br>Try a different keyword.</div></div>';
       return;
     }
 
-    container.innerHTML = data.results.map(item => `
-      <div class="search-row-card" onclick="selectSearchItem(${JSON.stringify(item).replace(/"/g, '&quot;')})">
+    container.innerHTML = items.map((item, idx) => `
+      <div class="food-row" onclick="openFoodModalByIndex(${idx})">
         <div>
-          <div style="font-weight:600;font-size:0.95rem;color:var(--text-primary);">
-            <span class="diet-dot ${item.is_veg ? 'veg' : 'non-veg'}"></span>
-            <span>${item.display_name || item.name.replace(/_/g, ' ')}</span>
-          </div>
-          <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:2px;">
-            ${item.calories_per_100g} kcal · P:${item.protein}g · C:${item.carbs}g · F:${item.fat}g (per 100g)
-          </div>
+          <div class="food-row-name">${escapeHtml(item.display_name || item.name || '')} ${item.is_veg ? '🟢' : '🔴'}</div>
+          <div class="food-row-cal">${Math.round(item.calories_per_100g || 0)} kcal · ${item.protein || 0}g P per 100g</div>
         </div>
-        <button type="button" class="btn btn-sm btn-secondary">Select +</button>
+        <button class="food-add-btn" onclick="event.stopPropagation(); openFoodModalByIndex(${idx})">+</button>
       </div>
     `).join('');
-  } catch (e) {
-    container.innerHTML = '<div style="padding:14px;color:var(--text-tertiary);">Search service unavailable.</div>';
+  } catch (err) {
+    container.innerHTML = '<div class="empty"><div class="empty-text">Error loading foods.</div></div>';
   }
 }
 
-function selectSearchItem(item) {
-  AppState.currentFoodName = item.name;
-  AppState.currentNutrition = item;
+let _modalFoodItem = null;
+let _modalFoodMeal = 'breakfast';
 
-  document.getElementById('manual-dish-name').textContent = item.display_name || item.name.replace(/_/g, ' ');
-  document.getElementById('manual-grams-slider').value = 100;
-  updateManualServing(100);
+function openFoodModalByIndex(idx) {
+  const food = _searchResultsCache[idx];
+  if (!food) return;
+  _modalFoodItem = food;
 
-  const calcCard = document.getElementById('manual-portion-card');
-  if (calcCard) {
-    calcCard.style.display = 'block';
-    calcCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
+  const nameEl = document.getElementById('food-modal-name');
+  if (nameEl) nameEl.textContent = food.display_name || food.name;
+
+  const slider = document.getElementById('fm-portion-slider');
+  if (slider) slider.value = 100;
+  updateFoodModalPortion(100);
+
+  openModal('food-detail-modal');
 }
 
-function updateManualServing(grams) {
-  const g = parseInt(grams) || 100;
-  const label = document.getElementById('manual-serving-label');
-  if (label) label.textContent = `${g}g`;
+function updateFoodModalPortion(val) {
+  const portion = parseInt(val, 10) || 100;
+  const disp = document.getElementById('fm-portion-display');
+  if (disp) disp.textContent = `${portion}g`;
 
-  const factor = g / 100;
-  const n = AppState.currentNutrition || {};
-
-  document.getElementById('m-val-cal').textContent = Math.round((n.calories_per_100g || 0) * factor);
-  document.getElementById('m-val-pro').textContent = Math.round((n.protein || 0) * factor * 10) / 10 + 'g';
-  document.getElementById('m-val-car').textContent = Math.round((n.carbs || 0) * factor * 10) / 10 + 'g';
-  document.getElementById('m-val-fat').textContent = Math.round((n.fat || 0) * factor * 10) / 10 + 'g';
-}
-
-async function logManualSearchMeal() {
-  const portion = parseInt(document.getElementById('manual-grams-slider').value) || 100;
+  if (!_modalFoodItem) return;
   const factor = portion / 100;
-  const n = AppState.currentNutrition || {};
+  const cal = Math.round((_modalFoodItem.calories_per_100g || 0) * factor);
+  const pro = Math.round((_modalFoodItem.protein || 0) * factor * 10) / 10;
+  const carb = Math.round((_modalFoodItem.carbs || 0) * factor * 10) / 10;
+  const fat = Math.round((_modalFoodItem.fat || 0) * factor * 10) / 10;
 
-  const payload = {
-    user_id: AppState.userId,
-    food: AppState.currentFoodName,
-    portion: portion,
-    calories: Math.round((n.calories_per_100g || 0) * factor),
-    protein: Math.round((n.protein || 0) * factor * 10) / 10,
-    carbs: Math.round((n.carbs || 0) * factor * 10) / 10,
-    fat: Math.round((n.fat || 0) * factor * 10) / 10,
-    meal_type: AppState.currentMealType,
-    date: AppState.diaryDate
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = v;
   };
+  setVal('fm-cal', cal);
+  setVal('fm-pro', pro + 'g');
+  setVal('fm-car', carb + 'g');
+  setVal('fm-fat', fat + 'g');
+}
+
+function fmSelectMeal(el, meal) {
+  document.querySelectorAll('#food-detail-modal .pill').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  _modalFoodMeal = meal;
+}
+
+async function logFromFoodModal() {
+  if (!_modalFoodItem) return;
+  const portion = parseInt(document.getElementById('fm-portion-slider')?.value || '100', 10);
+  const factor = portion / 100;
 
   try {
     const res = await fetch('/api/log_meal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        date: AppState.diaryDate,
+        food: _modalFoodItem.name || _modalFoodItem.display_name,
+        portion: portion,
+        calories: Math.round((_modalFoodItem.calories_per_100g || 0) * factor),
+        protein: Math.round((_modalFoodItem.protein || 0) * factor * 10) / 10,
+        carbs: Math.round((_modalFoodItem.carbs || 0) * factor * 10) / 10,
+        fat: Math.round((_modalFoodItem.fat || 0) * factor * 10) / 10,
+        meal_type: _modalFoodMeal
+      })
     });
     const data = await res.json();
     if (data.success) {
-      showToast('Meal added to diary! ✅');
-      document.getElementById('manual-portion-card').style.display = 'none';
-      setTimeout(() => showScreen('history'), 500);
+      showToast('Added to diary! ✅');
+      closeModal('food-detail-modal');
+      loadDashboard();
     }
-  } catch (e) {}
+  } catch (err) {
+    showToast('Failed to add meal.', true);
+  }
 }
 
-// ==========================================
-// 8. BARCODE & FMCG SCANNER
-// ==========================================
-async function openBarcodeModal() {
-  document.getElementById('barcode-scan-modal').classList.add('open');
-  const viewport = document.getElementById('barcode-camera-viewport');
-  viewport.innerHTML = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:82%;height:60%;border:2px solid #f97316;border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,0.5);pointer-events:none;"></div>';
-  AppState.barcodeRunning = true;
+// ── BARCODE SCANNER ───────────────────────────────────────────────
+let _barcodeDetections = {};   // code → count of consistent reads
+let _barcodeLocked = false;    // prevent double-fire
+let _barcodeCurrentData = null;// last fetched product
 
-  if (nativeBarcodeDetector && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
-      });
-      AppState.barcodeStream = stream;
-      const tracks = stream.getVideoTracks();
-      if (tracks.length > 0) AppState.barcodeVideoTrack = tracks[0];
+function manualBarcodeSearch() {
+  const inp = document.getElementById('manual-barcode-input');
+  const code = (inp ? inp.value : '').trim().replace(/\D/g, '');
+  if (!code || code.length < 6) {
+    showToast('Enter a valid barcode number.', true);
+    return;
+  }
+  lookupBarcode(code);
+}
 
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      video.setAttribute('playsinline', 'true');
-      video.autoplay = true;
-      video.muted = true;
-      viewport.appendChild(video);
-      await video.play();
+function startBarcodeScanner() {
+  const promptCard = document.getElementById('barcode-prompt-card');
+  const view = document.getElementById('barcode-scanner-view');
+  const wrap = document.getElementById('barcode-video-wrap');
 
-      function scanNativeFrame() {
-        if (!AppState.barcodeRunning) return;
-        if (video.readyState >= 2) {
-          nativeBarcodeDetector.detect(video).then(codes => {
-            if (codes.length > 0 && codes[0].rawValue && AppState.barcodeRunning) {
-              onBarcodeFound(codes[0].rawValue);
-              return;
-            }
-            if (AppState.barcodeRunning) AppState.barcodeAnimFrame = requestAnimationFrame(scanNativeFrame);
-          }).catch(() => {
-            if (AppState.barcodeRunning) AppState.barcodeAnimFrame = requestAnimationFrame(scanNativeFrame);
-          });
-        } else {
-          if (AppState.barcodeRunning) AppState.barcodeAnimFrame = requestAnimationFrame(scanNativeFrame);
-        }
-      }
-      AppState.barcodeAnimFrame = requestAnimationFrame(scanNativeFrame);
+  if (!wrap) return;
+  if (view) view.style.display = 'block';
+  if (promptCard) promptCard.style.display = 'none';
+
+  _barcodeDetections = {};
+  _barcodeLocked = false;
+
+  if (typeof Quagga === 'undefined') {
+    showToast('Barcode scanner module not loaded.', true);
+    stopBarcodeScanner();
+    return;
+  }
+
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: wrap,
+      constraints: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'environment',
+        focusMode: 'continuous'
+      },
+      area: { top: '15%', right: '5%', left: '5%', bottom: '15%' }  // limit scan area
+    },
+    locator: { patchSize: 'medium', halfSample: false },
+    numOfWorkers: 2,
+    frequency: 12,
+    decoder: {
+      readers: [
+        'ean_reader',        // EAN-13 (most Indian products)
+        'ean_8_reader',      // EAN-8
+        'upc_reader',        // UPC-A
+        'upc_e_reader',      // UPC-E
+        'code_128_reader',   // Code 128 (some packets)
+        'code_39_reader'     // Code 39
+      ],
+      multiple: false
+    }
+  }, (err) => {
+    if (err) {
+      showToast('Camera access denied — use manual entry below.', true);
+      stopBarcodeScanner();
       return;
-    } catch (e) {}
-  }
+    }
+    Quagga.start();
+    const st = document.getElementById('barcode-scan-status');
+    if (st) st.textContent = '🟠 Scanning — hold barcode steady inside the frame';
+  });
 
-  // Quagga Fallback
-  if (typeof Quagga !== 'undefined') {
-    Quagga.init({
-      inputStream: { name: 'Live', type: 'LiveStream', target: viewport },
-      decoder: { readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'code_128_reader'] }
-    }, (err) => {
-      if (!err) Quagga.start();
-    });
-    Quagga.onDetected(res => {
-      if (res && res.codeResult && res.codeResult.code) {
-        onBarcodeFound(res.codeResult.code);
+  // Remove any existing listener first
+  Quagga.offDetected();
+
+  Quagga.onDetected((result) => {
+    if (_barcodeLocked) return;
+
+    const code = result?.codeResult?.code;
+    const err = result?.codeResult?.decodedCodes?.reduce((sum, d) => sum + (d.error || 0), 0) / (result?.codeResult?.decodedCodes?.length || 1);
+
+    // Only accept high-confidence reads (low error rate)
+    if (!code || err > 0.22) return;
+
+    _barcodeDetections[code] = (_barcodeDetections[code] || 0) + 1;
+
+    const st = document.getElementById('barcode-scan-status');
+
+    // Require 3 consistent reads of the same code
+    if (_barcodeDetections[code] >= 3) {
+      _barcodeLocked = true;
+      if (st) st.textContent = `✅ Got it! Looking up ${code}...`;
+
+      // Flash the laser green
+      const laser = document.getElementById('barcode-laser');
+      if (laser) {
+        laser.style.background = 'linear-gradient(90deg,transparent,#10b981,transparent)';
+        laser.style.boxShadow = '0 0 12px #10b981';
       }
-    });
-  }
+
+      setTimeout(() => {
+        stopBarcodeScanner();
+        lookupBarcode(code);
+      }, 400);
+    } else {
+      if (st) st.textContent = `🟠 Barcode detected (${_barcodeDetections[code]}/3 confirmations)…`;
+    }
+  });
 }
 
-function onBarcodeFound(code) {
-  AppState.barcodeRunning = false;
-  if (AppState.barcodeAnimFrame) cancelAnimationFrame(AppState.barcodeAnimFrame);
-  if (navigator.vibrate) try { navigator.vibrate(100); } catch (e) {}
-  closeBarcodeModal();
-  lookupBarcodeProduct(code);
-}
-
-function closeBarcodeModal() {
-  document.getElementById('barcode-scan-modal').classList.remove('open');
-  AppState.barcodeRunning = false;
-  if (AppState.barcodeAnimFrame) cancelAnimationFrame(AppState.barcodeAnimFrame);
-  if (AppState.barcodeStream) {
-    AppState.barcodeStream.getTracks().forEach(t => t.stop());
-    AppState.barcodeStream = null;
-  }
+function stopBarcodeScanner() {
   if (typeof Quagga !== 'undefined') {
     try { Quagga.stop(); } catch (e) {}
+    Quagga.offDetected();
   }
+  const view = document.getElementById('barcode-scanner-view');
+  if (view) view.style.display = 'none';
+  const promptCard = document.getElementById('barcode-prompt-card');
+  if (promptCard) promptCard.style.display = 'block';
+  _barcodeLocked = false;
+  _barcodeDetections = {};
 }
 
-async function toggleTorchlight() {
-  if (!AppState.barcodeVideoTrack) {
-    showToast('Flashlight not available.', true);
-    return;
-  }
+async function lookupBarcode(code) {
+  showToast(`🔍 Looking up barcode ${code}…`);
+  const container = document.getElementById('barcode-result');
+  if (!container) return;
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div class="result-card" style="text-align:center;padding:20px;">
+      <div class="spinner" style="margin:0 auto 10px;"></div>
+      <div style="font-size:.82rem;color:#64748b;">Searching Open Food Facts, USDA &amp; AI database…<br><strong style="color:#f97316;">${escapeHtml(code)}</strong></div>
+    </div>`;
+
   try {
-    const caps = AppState.barcodeVideoTrack.getCapabilities ? AppState.barcodeVideoTrack.getCapabilities() : {};
-    if (caps.torch) {
-      AppState.isTorchOn = !AppState.isTorchOn;
-      await AppState.barcodeVideoTrack.applyConstraints({ advanced: [{ torch: AppState.isTorchOn }] });
-      showToast(AppState.isTorchOn ? 'Flashlight ON 🔦' : 'Flashlight OFF 🔦');
-    }
-  } catch (e) {}
-}
-
-function lookupManualBarcodeString() {
-  const val = (document.getElementById('manual-barcode-digits').value || '').trim();
-  if (val.length < 4) {
-    showToast('Please enter a valid barcode.', true);
-    return;
-  }
-  lookupBarcodeProduct(val);
-}
-
-async function lookupBarcodeProduct(code) {
-  showToast(`Searching barcode (${code})...`);
-  try {
-    const keyParam = AppState.geminiKey ? `?api_key=${encodeURIComponent(AppState.geminiKey)}` : '';
-    const res = await fetch(`/api/barcode/${encodeURIComponent(code)}${keyParam}`);
+    const res = await fetch(`/api/barcode/${encodeURIComponent(code)}`);
     const data = await res.json();
 
     if (!res.ok || data.error) {
-      showToast(data.error || 'Product not recognized.', true);
+      container.innerHTML = `
+        <div class="result-card" style="text-align:center;padding:20px;">
+          <div style="font-size:1.8rem;margin-bottom:8px;">❌</div>
+          <div style="color:#ef4444;font-size:.88rem;font-weight:600;">Product not found</div>
+          <div style="font-size:.76rem;color:#64748b;margin:6px 0 14px;">Barcode: ${escapeHtml(code)}</div>
+          <button class="btn btn-primary btn-block" onclick="startBarcodeScanner()">&#x1F501; Try Again</button>
+        </div>`;
       return;
     }
 
-    AppState.barcodeNutrition = data;
-    document.getElementById('bc-item-name').textContent = data.name;
-    document.getElementById('bc-brand-badge').textContent = data.brand || data.source || 'PACKAGED FOOD';
-    document.getElementById('bc-serving-slider').value = 100;
-    updateBarcodeServing(100);
-
-    const modal = document.getElementById('barcode-result-modal');
-    if (modal) {
-      modal.classList.add('open');
-    }
-    showToast(`Found: ${data.name}`);
-  } catch (e) {
-    showToast('Lookup failed. Check connection.', true);
+    _barcodeCurrentData = data;
+    renderBarcodeResult(data, code);
+  } catch (err) {
+    container.innerHTML = `<div style="color:#ef4444;font-size:.85rem;padding:12px;text-align:center;">Lookup failed. Check connection &amp; try again.</div>`;
   }
 }
 
-function updateBarcodeServing(grams) {
-  const g = parseInt(grams) || 100;
-  const label = document.getElementById('bc-serving-label');
-  if (label) label.textContent = `${g}g`;
+let _barcodeServing = 100;  // current serving size in grams
 
-  const f = g / 100;
-  const n = AppState.barcodeNutrition;
+function renderBarcodeResult(data, code) {
+  const container = document.getElementById('barcode-result');
+  if (!container) return;
 
-  document.getElementById('bc-val-cal').textContent = Math.round((n.calories_per_100g || 0) * f);
-  document.getElementById('bc-val-pro').textContent = Math.round((n.protein || 0) * f * 10) / 10 + 'g';
-  document.getElementById('bc-val-car').textContent = Math.round((n.carbs || 0) * f * 10) / 10 + 'g';
-  document.getElementById('bc-val-fat').textContent = Math.round((n.fat || 0) * f * 10) / 10 + 'g';
+  const name = data.name || data.product_name || 'Packaged Product';
+  const cal100 = data.calories_per_100g || 0;
+  const pro100 = data.protein || 0;
+  const car100 = data.carbs || 0;
+  const fat100 = data.fat || 0;
+  const source = data.source || 'Product Database';
+  const brand = data.brand || '';
+  const serving = data.serving_size_g || 100;
+  _barcodeServing = serving;
+
+  // Source badge colour
+  const isOFF = source.includes('Open Food');
+  const isUSDA = source.includes('USDA');
+  const isAI = source.includes('AI') || source.includes('Universal');
+  const badgeColor = isOFF ? '#10b981' : isUSDA ? '#38bdf8' : '#a78bfa';
+  const badgeBg = isOFF ? 'rgba(16,185,129,.12)' : isUSDA ? 'rgba(56,189,248,.12)' : 'rgba(167,139,250,.12)';
+  const sourceIcon = isOFF ? '🌍' : isUSDA ? '🇺🇸' : '🤖';
+
+  container.innerHTML = `
+    <div class="result-card">
+      <!-- Source & barcode badges -->
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+        <span style="display:inline-flex;align-items:center;gap:4px;background:${badgeBg};border:1px solid ${badgeColor}40;border-radius:99px;padding:3px 10px;font-size:.68rem;font-weight:700;color:${badgeColor};">
+          ${sourceIcon} ${escapeHtml(source.split('(')[0].trim())}
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);border-radius:99px;padding:3px 10px;font-size:.68rem;font-weight:700;color:#fb923c;">
+          📦 ${escapeHtml(code)}
+        </span>
+      </div>
+
+      <!-- Product name -->
+      <div class="result-name" style="margin-bottom:2px;">${escapeHtml(name)}</div>
+      ${brand ? `<div style="font-size:.75rem;color:#64748b;margin-bottom:10px;">${escapeHtml(brand)}</div>` : ''}
+
+      <!-- Serving size selector -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;background:rgba(255,255,255,.04);border-radius:10px;padding:8px 12px;">
+        <span style="font-size:.78rem;color:#94a3b8;">Serving size</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button onclick="setBarcodeServing(this,100)" class="pill ${serving===100?'active':''}" style="padding:3px 10px;font-size:.7rem;">100g</button>
+          <button onclick="setBarcodeServing(this,${serving})" class="pill ${serving!==100?'active':''}" style="padding:3px 10px;font-size:.7rem;">${serving}g (1 srv)</button>
+          <span style="font-size:.78rem;font-weight:700;color:#f97316;" id="bc-serving-label">${_barcodeServing}g</span>
+        </div>
+      </div>
+
+      <!-- Macro boxes -->
+      <div class="macros-row" id="bc-macros">
+        <div class="macro-box"><div class="mv cal" id="bc-cal">${Math.round(cal100 * _barcodeServing / 100)}</div><div class="ml">kcal</div></div>
+        <div class="macro-box"><div class="mv pro" id="bc-pro">${Math.round(pro100 * _barcodeServing / 100 * 10) / 10}g</div><div class="ml">protein</div></div>
+        <div class="macro-box"><div class="mv car" id="bc-car">${Math.round(car100 * _barcodeServing / 100 * 10) / 10}g</div><div class="ml">carbs</div></div>
+        <div class="macro-box"><div class="mv fat" id="bc-fat">${Math.round(fat100 * _barcodeServing / 100 * 10) / 10}g</div><div class="ml">fat</div></div>
+      </div>
+
+      <!-- Portion slider -->
+      <div class="portion-row" style="margin-bottom:4px;"><span class="portion-lbl">Custom portion</span><span class="portion-val" id="bc-custom-label">${_barcodeServing}g</span></div>
+      <input type="range" id="bc-portion-slider" min="10" max="500" value="${_barcodeServing}" step="5"
+             oninput="updateBarcodePortionSlider(this.value)">
+
+      <!-- Meal type -->
+      <div class="pill-row" style="margin-bottom:12px;">
+        <span style="font-size:.72rem;color:#64748b;align-self:center;">Meal:</span>
+        <div class="pill active" data-meal="breakfast" onclick="bcSelectMeal(this,'breakfast')">Breakfast</div>
+        <div class="pill" data-meal="lunch" onclick="bcSelectMeal(this,'lunch')">Lunch</div>
+        <div class="pill" data-meal="dinner" onclick="bcSelectMeal(this,'dinner')">Dinner</div>
+        <div class="pill" data-meal="snack" onclick="bcSelectMeal(this,'snack')">Snack</div>
+      </div>
+
+      <!-- Log button -->
+      <button class="btn btn-primary btn-block" onclick="logBarcodeProduct()">✅ Add to Diary</button>
+      <button style="display:block;width:100%;margin-top:8px;background:none;border:none;color:#64748b;font-size:.75rem;cursor:pointer;padding:6px;" onclick="startBarcodeScanner()">🔄 Wrong product? Scan again</button>
+    </div>
+  `;
 }
 
-async function logBarcodeItemToDiary() {
-  const portion = parseInt(document.getElementById('bc-serving-slider').value) || 100;
-  const f = portion / 100;
-  const n = AppState.barcodeNutrition;
+let _bcMealType = 'breakfast';
+function bcSelectMeal(el, type) {
+  document.querySelectorAll('#barcode-result .pill[data-meal]').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  _bcMealType = type;
+}
 
-  const payload = {
-    user_id: AppState.userId,
-    food: n.name,
-    portion: portion,
-    calories: Math.round((n.calories_per_100g || 0) * f),
-    protein: Math.round((n.protein || 0) * f * 10) / 10,
-    carbs: Math.round((n.carbs || 0) * f * 10) / 10,
-    fat: Math.round((n.fat || 0) * f * 10) / 10,
-    meal_type: AppState.currentMealType,
-    date: AppState.diaryDate
-  };
+function setBarcodeServing(el, grams) {
+  _barcodeServing = grams;
+  document.querySelectorAll('#barcode-result .pill').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const slider = document.getElementById('bc-portion-slider');
+  if (slider) slider.value = grams;
+  updateBarcodePortionSlider(grams);
+}
 
+function updateBarcodePortionSlider(val) {
+  _barcodeServing = parseInt(val, 10);
+  const d = _barcodeCurrentData || {};
+  const factor = _barcodeServing / 100;
+  const setEl = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  setEl('bc-cal', Math.round((d.calories_per_100g || 0) * factor));
+  setEl('bc-pro', Math.round((d.protein || 0) * factor * 10) / 10 + 'g');
+  setEl('bc-car', Math.round((d.carbs || 0) * factor * 10) / 10 + 'g');
+  setEl('bc-fat', Math.round((d.fat || 0) * factor * 10) / 10 + 'g');
+  setEl('bc-serving-label', _barcodeServing + 'g');
+  setEl('bc-custom-label', _barcodeServing + 'g');
+}
+
+async function logBarcodeProduct() {
+  const d = _barcodeCurrentData;
+  if (!d) { showToast('No product loaded.', true); return; }
+  const factor = _barcodeServing / 100;
   try {
     const res = await fetch('/api/log_meal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        date: AppState.diaryDate,
+        food: d.name,
+        portion: _barcodeServing,
+        calories: Math.round((d.calories_per_100g || 0) * factor),
+        protein: Math.round((d.protein || 0) * factor * 10) / 10,
+        carbs: Math.round((d.carbs || 0) * factor * 10) / 10,
+        fat: Math.round((d.fat || 0) * factor * 10) / 10,
+        meal_type: _bcMealType,
+        source: 'barcode'
+      })
     });
-    const data = await res.json();
-    if (data.success) {
-      showToast('Packaged item added to diary! ✅');
-      document.getElementById('barcode-result-card').style.display = 'none';
-      setTimeout(() => showScreen('history'), 500);
+    const r = await res.json();
+    if (r.success) {
+      showToast(`✅ ${d.name} logged to diary!`);
+      const container = document.getElementById('barcode-result');
+      if (container) container.style.display = 'none';
+      _barcodeCurrentData = null;
+      loadDashboard();
     }
-  } catch (e) {}
-}
-
-async function handlePackageImageUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  showToast('AI analyzing package OCR & nutrition facts...');
-
-  const fd = new FormData();
-  fd.append('image', file);
-  if (AppState.geminiKey) fd.append('api_key', AppState.geminiKey);
-
-  try {
-    const res = await fetch('/api/scan_package', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      AppState.barcodeNutrition = data;
-      document.getElementById('bc-item-name').textContent = data.name;
-      document.getElementById('bc-brand-badge').textContent = data.source || 'AI OCR Verified';
-      const defPortion = data.portion_g || 100;
-      document.getElementById('bc-serving-slider').value = defPortion;
-      updateBarcodeServing(defPortion);
-
-      const modal = document.getElementById('barcode-result-modal');
-      if (modal) {
-        modal.classList.add('open');
-      }
-      showToast(`Recognized: ${data.name}`);
-    } else {
-      showToast(data.error || 'Could not read package label.', true);
-    }
-  } catch (err) {
-    showToast('Package OCR scan failed.', true);
-  }
-}
-
-// ==========================================
-// 9. HISTORY & DIARY TIMELINE
-// ==========================================
-function navigateHistoryDate(daysDelta) {
-  const cur = new Date(AppState.diaryDate);
-  cur.setDate(cur.getDate() + daysDelta);
-  AppState.diaryDate = cur.toISOString().split('T')[0];
-  updateHistoryDateHeader();
-  loadHistoryTimeline();
-}
-
-function updateHistoryDateHeader() {
-  const isToday = AppState.diaryDate === new Date().toISOString().split('T')[0];
-  const options = { weekday: 'short', day: 'numeric', month: 'short' };
-  const str = new Date(AppState.diaryDate).toLocaleDateString('en-IN', options);
-  
-  const title = document.getElementById('history-date-title');
-  if (title) title.textContent = isToday ? `Today (${str})` : str;
-}
-
-async function loadHistoryTimeline() {
-  try {
-    const res = await fetch(`/api/get_diary/${AppState.userId}?date=${AppState.diaryDate}`);
-    const data = await res.json();
-    renderHistoryTimeline(data.entries || [], data.totals || {});
   } catch (e) {
-    renderHistoryTimeline([], {});
+    showToast('Failed to log product.', true);
   }
 }
 
-function renderHistoryTimeline(entries, totals) {
-  const container = document.getElementById('history-timeline-container');
-  if (!container) return;
+// ── VOICE LOGGING ─────────────────────────────────────────────────
+function startVoiceInput() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    showToast('Voice input is not supported in this browser.', true);
+    return;
+  }
+  const rec = new SR();
+  rec.lang = 'en-IN';
+  showToast('🎤 Listening... Speak your meal');
 
-  document.getElementById('hist-cal-total').textContent = Math.round(totals.calories || 0);
-  document.getElementById('hist-pro-total').textContent = Math.round(totals.protein || 0) + 'g';
-  document.getElementById('hist-car-total').textContent = Math.round(totals.carbs || 0) + 'g';
-  document.getElementById('hist-fat-total').textContent = Math.round(totals.fat || 0) + 'g';
+  rec.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    const input = document.getElementById('voice-text-input');
+    if (input) input.value = transcript;
+    parseVoiceLog();
+  };
+  rec.onerror = () => showToast('Voice recognition error.', true);
+  rec.start();
+}
 
-  if (!entries || entries.length === 0) {
-    container.innerHTML = `
-      <div style="text-align:center;padding:44px 20px;background:var(--bg-surface-subtle);border-radius:var(--radius-lg);border:1px solid var(--border-hairline);">
-        <div style="font-size:2.5rem;margin-bottom:8px;">🍽️</div>
-        <div style="font-family:var(--font-display);font-weight:700;font-size:1.05rem;color:var(--text-primary);">No meals logged for this day</div>
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin:4px 0 18px;">Scan your food or search the database to log meals.</p>
-        <button type="button" class="btn btn-primary btn-sm" onclick="showScreen('scanner')">Scan Food Plate</button>
-      </div>
-    `;
+let _voiceParsedItems = [];
+let _voiceMealType = 'breakfast';
+
+async function parseVoiceLog() {
+  const input = document.getElementById('voice-text-input');
+  const text = (input ? input.value : '').trim();
+  if (!text) {
+    showToast('Type or speak your meal first.', true);
     return;
   }
 
-  const mealGroups = { breakfast: [], lunch: [], dinner: [], snack: [] };
-  entries.forEach((e, idx) => {
-    e._index = idx;
-    const type = e.meal_type || 'lunch';
-    if (!mealGroups[type]) mealGroups[type] = [];
-    mealGroups[type].push(e);
-  });
+  const out = document.getElementById('voice-parse-result');
+  if (out) {
+    out.style.display = 'block';
+    out.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  }
 
-  const mealHeaders = {
-    breakfast: '🌅 Breakfast',
-    lunch: '☀️ Lunch',
-    dinner: '🌙 Dinner',
-    snack: '🍎 Snacks'
-  };
+  try {
+    const res = await fetch('/api/voice_log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: text,
+        user_id: AppState.userId,
+        api_key: AppState.geminiKey
+      })
+    });
+    const data = await res.json();
+    if (!data.success || !data.parsed) {
+      if (out) out.innerHTML = `<div style="color:#ef4444;font-size:.85rem;padding:8px;">${data.error || 'Could not understand meal.'}</div>`;
+      return;
+    }
 
-  let html = '';
-  ['breakfast', 'lunch', 'dinner', 'snack'].forEach(m => {
-    const list = mealGroups[m];
-    if (!list || list.length === 0) return;
+    const p = data.parsed;
+    _voiceMealType = p.meal_type || 'lunch';
+    _voiceParsedItems = p.items || [];
 
-    const subCal = list.reduce((acc, x) => acc + (x.calories || 0), 0);
-    const subPro = list.reduce((acc, x) => acc + (x.protein || 0), 0);
+    if (!_voiceParsedItems.length) {
+      if (out) out.innerHTML = '<div style="color:#ef4444;padding:8px;">No foods identified.</div>';
+      return;
+    }
 
-    html += `
-      <div class="meal-timeline-block">
-        <div class="meal-block-top">
-          <span>${mealHeaders[m]}</span>
-          <span style="color:var(--accent-primary);">${subCal} kcal · ${Math.round(subPro)}g Pro</span>
-        </div>
-        <div>
-          ${list.map(e => `
-            <div class="timeline-entry-row">
-              <div>
-                <div class="entry-food-title">${e.food.replace(/_/g, ' ')}</div>
-                <div class="entry-food-meta">
-                  ${e.portion}g · P:${e.protein}g · C:${e.carbs}g · F:${e.fat}g ${e.time ? '· ' + e.time : ''}
+    if (out) {
+      // Helper: resolve calories from any field Gemini may return
+      const itemCal = (item) => {
+        return Math.round(
+          item.calories ||
+          item.calories_total ||
+          ((item.calories_per_100g || 0) * (item.portion_g || 100) / 100)
+        );
+      };
+
+      const mealEmoji = { breakfast: '🌅', lunch: '☀️', dinner: '🌙', snack: '🥪' };
+      const emoji = mealEmoji[_voiceMealType] || '🍽️';
+
+      out.innerHTML = `
+        <div class="result-card">
+          <div class="result-name">${emoji} ${_voiceMealType.charAt(0).toUpperCase() + _voiceMealType.slice(1)}</div>
+          <div style="margin:10px 0;">
+            ${_voiceParsedItems.map(item => {
+              const cal = itemCal(item);
+              const name = item.display_name || (item.food || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+              const portionDesc = item.quantity_description || `${item.portion_g || 100}g`;
+              return `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+                <div>
+                  <div style="font-size:.88rem;font-weight:600;color:#f0f4f8;">${escapeHtml(name)}</div>
+                  <div style="font-size:.72rem;color:#64748b;margin-top:2px;">${escapeHtml(portionDesc)} · ${item.protein||0}g P · ${item.carbs||0}g C · ${item.fat||0}g F</div>
                 </div>
-              </div>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <span style="font-family:var(--font-display);font-weight:700;color:var(--accent-primary);font-size:0.95rem;">${e.calories} kcal</span>
-                <button type="button" class="delete-entry-btn" onclick="deleteHistoryEntry(${e._index})" title="Remove item">🗑️</button>
-              </div>
-            </div>
-          `).join('')}
+                <span style="font-weight:800;color:#f97316;font-size:.95rem;">${cal} <span style="font-size:.65rem;font-weight:600;">kcal</span></span>
+              </div>`;
+            }).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08);">
+            <span style="font-size:.8rem;color:#94a3b8;">Total</span>
+            <span style="font-weight:800;color:#f97316;">${_voiceParsedItems.reduce((s,i) => s + (i.calories || i.calories_total || Math.round((i.calories_per_100g||0)*(i.portion_g||100)/100)), 0)} kcal</span>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="logVoiceParsedMeals()">✅ Add All to Diary</button>
         </div>
-      </div>
-    `;
-  });
-
-  container.innerHTML = html;
+      `;
+    }
+  } catch (err) {
+    if (out) out.innerHTML = '<div style="color:#ef4444;padding:8px;">Voice parsing failed.</div>';
+  }
 }
 
-async function deleteHistoryEntry(index) {
-  if (!confirm('Remove this food item from your timeline?')) return;
+async function logVoiceParsedMeals() {
+  if (!_voiceParsedItems.length) return;
+  let logged = 0;
+  for (const item of _voiceParsedItems) {
+    try {
+      // Resolve calories with triple fallback
+      const cal = Math.round(
+        item.calories ||
+        item.calories_total ||
+        ((item.calories_per_100g || 0) * (item.portion_g || 100) / 100)
+      );
+      // Resolve macros — Gemini sometimes puts them at top-level per-portion
+      const pro = parseFloat(item.protein || 0);
+      const carb = parseFloat(item.carbs || item.carbohydrates || 0);
+      const fat = parseFloat(item.fat || 0);
+
+      await fetch('/api/log_meal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: AppState.userId,
+          date: AppState.diaryDate,
+          food: item.food || item.display_name || 'Food Item',
+          portion: item.portion_g || 100,
+          calories: cal,
+          protein: pro,
+          carbs: carb,
+          fat: fat,
+          meal_type: _voiceMealType
+        })
+      });
+      logged++;
+    } catch (e) { console.error('logVoiceParsedMeals item error:', e); }
+  }
+  showToast(`${logged} item${logged !== 1 ? 's' : ''} added to diary! ✅`);
+  const out = document.getElementById('voice-parse-result');
+  if (out) out.style.display = 'none';
+  const inp = document.getElementById('voice-text-input');
+  if (inp) inp.value = '';
+  loadDashboard();
+}
+
+// ── DIARY VIEW & DATE NAVIGATION ──────────────────────────────────
+function changeDiaryDate(delta) {
+  const d = new Date(AppState.diaryDate);
+  d.setDate(d.getDate() + delta);
+  AppState.diaryDate = d.toISOString().split('T')[0];
+  loadDiaryTab();
+  loadDashboard();
+}
+
+async function loadDiaryTab() {
+  const label = document.getElementById('diary-date-label');
+  if (label) {
+    const today = new Date().toISOString().split('T')[0];
+    label.textContent = AppState.diaryDate === today ? 'Today' : AppState.diaryDate;
+  }
+
+  const container = document.getElementById('diary-entries-list');
+  if (!container) return;
+  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const res = await fetch(`/api/get_diary/${AppState.userId}?date=${AppState.diaryDate}`);
+    const data = await res.json();
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    const totals = data.totals || { calories: 0, protein: 0, carbs: 0, fat: 0 };
+
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = v;
+    };
+    setVal('diary-total-cal', Math.round(totals.calories || 0));
+    setVal('diary-total-pro', Math.round(totals.protein || 0) + 'g');
+    setVal('diary-total-carb', Math.round(totals.carbs || 0) + 'g');
+    setVal('diary-total-fat', Math.round(totals.fat || 0) + 'g');
+
+    if (!entries.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">📖</div><div class="empty-text">No meals logged for this date.</div></div>';
+      return;
+    }
+
+    // Group entries by meal_type
+    const mealGroups = { breakfast: [], lunch: [], dinner: [], snack: [] };
+    entries.forEach((item, idx) => {
+      const mt = (item.meal_type || 'snack').toLowerCase();
+      if (!mealGroups[mt]) mealGroups[mt] = [];
+      mealGroups[mt].push({ item, originalIndex: idx });
+    });
+
+    let html = '';
+    const groupTitles = {
+      breakfast: '🌅 Breakfast',
+      lunch: '☀️ Lunch',
+      dinner: '🌙 Dinner',
+      snack: '🥪 Snacks & Drinks'
+    };
+
+    for (const [key, group] of Object.entries(mealGroups)) {
+      if (!group.length) continue;
+      const groupCal = group.reduce((sum, g) => sum + (g.item.calories || 0), 0);
+      html += `
+        <div class="meal-group-lbl" style="display:flex;justify-content:space-between;">
+          <span>${groupTitles[key] || key}</span>
+          <span>${Math.round(groupCal)} kcal</span>
+        </div>
+      `;
+      group.forEach(g => {
+        const item = g.item;
+        html += `
+          <div class="meal-item">
+            <div>
+              <div class="mi-name">${escapeHtml(item.food || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</div>
+              <div class="mi-sub">${item.portion || 100}g · ${item.protein || 0}g P · ${item.carbs || 0}g C · ${item.fat || 0}g F</div>
+            </div>
+            <div style="display:flex;align-items:center;">
+              <span class="mi-cal">${Math.round(item.calories || 0)} kcal</span>
+              <button class="mi-del" onclick="deleteDiaryEntry(${g.originalIndex})" title="Delete item">🗑️</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = '<div class="empty"><div class="empty-text">Could not load diary.</div></div>';
+  }
+}
+
+async function deleteDiaryEntry(index) {
+  if (!confirm('Remove this food from diary?')) return;
   try {
     const res = await fetch('/api/delete_meal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: AppState.userId, date: AppState.diaryDate, meal_index: index })
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        date: AppState.diaryDate,
+        meal_index: index
+      })
     });
-    const data = await res.json();
-    if (data.success) {
-      showToast('Meal removed.');
-      renderHistoryTimeline(data.entries, data.totals);
+    const d = await res.json();
+    if (d.success) {
+      showToast('Item deleted.');
+      loadDiaryTab();
+      loadDashboard();
+    }
+  } catch (err) {
+    showToast('Delete failed.', true);
+  }
+}
+
+// ── PROGRESS TAB (ANALYTICS, EXERCISE, MICROS) ────────────────────
+async function loadProgressTab() {
+  loadAnalytics(7);
+  loadProgressExercise();
+  loadMicronutrients();
+  loadGlycemicInfo();
+}
+
+async function loadProgressExercise() {
+  try {
+    const exRes = await fetch(`/api/get_exercise/${AppState.userId}?date=${AppState.diaryDate}`);
+    const exData = await exRes.json();
+
+    const dRes = await fetch(`/api/get_diary/${AppState.userId}?date=${AppState.diaryDate}`);
+    const dData = await dRes.json();
+
+    const foodCal = Math.round((dData.totals && dData.totals.calories) || 0);
+    const burned = exData.total_burned || 0;
+    const net = foodCal - burned;
+
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = v;
+    };
+    setVal('p-food-cal', foodCal);
+    setVal('p-burned-cal', burned);
+    setVal('p-net-cal', net);
+
+    const listEl = document.getElementById('p-exercise-list');
+    if (!listEl) return;
+    const entries = exData.entries || [];
+    if (!entries.length) {
+      listEl.innerHTML = '<div style="font-size:.83rem;color:#64748b;padding:8px 0;">No exercise logged today.</div>';
+      return;
+    }
+
+    listEl.innerHTML = entries.map((e, idx) => `
+      <div class="ex-row">
+        <div>
+          <div class="ex-name">${escapeHtml(e.exercise || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</div>
+          <div class="ex-sub">${e.duration_min} min · ${e.time || ''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="ex-burned">-${e.calories_burned} kcal</span>
+          <button onclick="deleteExercise(${idx})" style="background:none;border:none;color:#64748b;cursor:pointer;">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('loadProgressExercise error:', err);
+  }
+}
+
+function openExerciseModal() {
+  openModal('exercise-modal');
+}
+
+async function logExercise() {
+  const type = document.getElementById('ex-type-select')?.value || 'walking';
+  const duration = parseFloat(document.getElementById('ex-duration')?.value || '30');
+  const weight = (AppState.profile && AppState.profile.weight) || 70;
+
+  try {
+    const res = await fetch('/api/log_exercise', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        date: AppState.diaryDate,
+        exercise_type: type,
+        duration_min: duration,
+        weight_kg: weight
+      })
+    });
+    const d = await res.json();
+    if (d.success) {
+      showToast(`🔥 Burned ${d.calories_burned} kcal!`);
+      closeModal('exercise-modal');
+      loadProgressExercise();
+      loadDashboard();
+    }
+  } catch (err) {
+    showToast('Exercise logging failed.', true);
+  }
+}
+
+async function deleteExercise(idx) {
+  try {
+    const res = await fetch('/api/delete_exercise', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        date: AppState.diaryDate,
+        index: idx
+      })
+    });
+    const d = await res.json();
+    if (d.success) {
+      showToast('Exercise removed.');
+      loadProgressExercise();
       loadDashboard();
     }
   } catch (e) {}
 }
 
-function copyHistorySummary() {
-  const cal = document.getElementById('hist-cal-total').textContent;
-  const pro = document.getElementById('hist-pro-total').textContent;
-  const car = document.getElementById('hist-car-total').textContent;
-  const fat = document.getElementById('hist-fat-total').textContent;
-  
-  const text = `🍛 NutriVision India — Daily Summary (${AppState.diaryDate})\n🔥 Total Calories: ${cal} kcal\n💪 Protein: ${pro} | ⚡ Carbs: ${car} | 🥑 Fat: ${fat}\nTracked with NutriVision India.`;
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('Timeline summary copied! 📋');
-  }).catch(() => {
-    showToast('Could not copy summary.', true);
-  });
+function selectPeriod(days, el) {
+  document.querySelectorAll('.pill[id^="period-"]').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  loadAnalytics(days);
 }
 
-// ==========================================
-// 10. NUTRI-COACH AI (GEMINI)
-// ==========================================
-function checkGeminiKeyStatus() {
-  const statusEl = document.getElementById('key-status-label');
-  const btnText = document.getElementById('key-btn-text');
-  const inputEl = document.getElementById('gemini-key-input');
-  if (inputEl && AppState.geminiKey) inputEl.value = AppState.geminiKey;
-
-  if (AppState.geminiKey) {
-    if (statusEl) { statusEl.textContent = 'Saved in Browser ✓'; statusEl.style.color = '#10b981'; }
-    if (btnText) btnText.textContent = 'API Key Configured ✓';
-  } else {
-    fetch('/api/coach/status').then(r => r.json()).then(data => {
-      if (data.has_server_key) {
-        if (statusEl) { statusEl.textContent = 'Server Environment Key Active ✓'; statusEl.style.color = '#38bdf8'; }
-        if (btnText) btnText.textContent = 'Server Key Active ✓';
-      }
-    }).catch(() => {});
-  }
-}
-
-function openGeminiModal() {
-  document.getElementById('gemini-key-modal').classList.add('open');
-}
-function closeGeminiModal() {
-  document.getElementById('gemini-key-modal').classList.remove('open');
-}
-
-function saveGeminiAPIKey() {
-  const val = (document.getElementById('gemini-key-input').value || '').trim();
-  AppState.geminiKey = val;
-  if (val) {
-    localStorage.setItem('nv_gemini_key', val);
-    showToast('Gemini API Key Saved! 🚀');
-  } else {
-    localStorage.removeItem('nv_gemini_key');
-    showToast('API Key cleared.');
-  }
-  checkGeminiKeyStatus();
-  closeGeminiModal();
-}
-
-async function testGeminiAPIKey() {
-  const keyInput = (document.getElementById('gemini-key-input').value || '').trim();
-  const testBtn = document.getElementById('btn-test-gemini-key');
-  testBtn.disabled = true;
-  testBtn.textContent = 'Testing...';
-
+let _calChartInstance = null;
+async function loadAnalytics(days = 7) {
   try {
-    const res = await fetch('/api/coach/test_key', {
+    const res = await fetch(`/api/get_analytics/${AppState.userId}?days=${days}`);
+    const data = await res.json();
+
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = v;
+    };
+    setVal('p-streak', data.streak_days || 0);
+    setVal('p-avg-cal', (data.averages && data.averages.calories) || 0);
+    setVal('p-avg-pro', ((data.averages && data.averages.protein) || 0) + 'g');
+
+    if (typeof Chart !== 'undefined') {
+      const labels = (data.days || []).map(d => {
+        const dt = new Date(d.date);
+        return dt.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+      });
+
+      const chartOpts = {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { display: false } },
+          y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+      };
+
+      // ── Calories bar chart ──
+      const calCtx = document.getElementById('chart-calories');
+      if (calCtx) {
+        const calData = (data.days || []).map(d => d.calories || 0);
+        if (_calChartInstance) _calChartInstance.destroy();
+        _calChartInstance = new Chart(calCtx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Calories', data: calData, backgroundColor: 'rgba(249,115,22,0.7)', borderRadius: 6 }] },
+          options: chartOpts
+        });
+      }
+
+      // ── Protein line chart ──
+      const proCtx = document.getElementById('chart-protein');
+      if (proCtx) {
+        const proData = (data.days || []).map(d => Math.round(d.protein || 0));
+        if (proCtx._ci) proCtx._ci.destroy();
+        proCtx._ci = new Chart(proCtx, {
+          type: 'line',
+          data: { labels, datasets: [{ label: 'Protein (g)', data: proData, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.1)', borderWidth: 2, pointRadius: 3, tension: 0.35, fill: true }] },
+          options: chartOpts
+        });
+      }
+
+      // ── Body Weight chart ──
+      const wtCtx = document.getElementById('chart-weight');
+      if (wtCtx) {
+        try {
+          const wtRes = await fetch(`/api/get_weight/${AppState.userId}?days=${days}`);
+          const wtJson = await wtRes.json();
+          const wte = wtJson.entries || [];
+          if (wte.length) {
+            const wtLabels = wte.map(e => { const dt = new Date(e.date); return dt.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }); });
+            const wtVals = wte.map(e => e.weight_kg);
+            if (wtCtx._ci) wtCtx._ci.destroy();
+            wtCtx._ci = new Chart(wtCtx, {
+              type: 'line',
+              data: { labels: wtLabels, datasets: [{ label: 'Weight (kg)', data: wtVals, borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.1)', borderWidth: 2, pointRadius: 4, tension: 0.3, fill: true }] },
+              options: chartOpts
+            });
+          }
+        } catch (e) { /* no weight data */ }
+      }
+    }
+  } catch (err) {
+    console.error('loadAnalytics error:', err);
+  }
+}
+
+
+async function logWeightToday() {
+  const inp = document.getElementById('weight-input');
+  const wt = parseFloat(inp ? inp.value : 0);
+  if (!wt || wt <= 20 || wt > 300) {
+    showToast('Please enter a valid weight in kg.', true);
+    return;
+  }
+  try {
+    const res = await fetch('/api/log_weight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: keyInput })
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        date: AppState.diaryDate,
+        weight_kg: wt
+      })
     });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      showToast('Gemini API Connected Successfully! 🚀');
-    } else {
-      showToast(data.error || 'Connection test failed.', true);
+    const d = await res.json();
+    if (d.success) {
+      showToast(`Weight recorded: ${wt} kg ✅`);
+      if (AppState.profile) AppState.profile.weight = wt;
+      loadAnalytics(7);
     }
   } catch (e) {
-    showToast('Network error during test.', true);
-  } finally {
-    testBtn.disabled = false;
-    testBtn.textContent = 'Test Key';
+    showToast('Failed to record weight.', true);
   }
 }
 
-function loadCoachScreen() {
-  updateCoachContextStrip();
-  const stream = document.getElementById('coach-chat-stream');
-  if (stream && stream.children.length === 0) {
-    initCoachWelcome();
-  }
-}
+async function loadMicronutrients() {
+  const container = document.getElementById('p-micronutrients');
+  if (!container) return;
 
-function updateCoachContextStrip() {
-  const goalEl = document.getElementById('c-ctx-goal');
-  const calEl = document.getElementById('c-ctx-cal');
-  const proEl = document.getElementById('c-ctx-pro');
-  const mealsEl = document.getElementById('c-ctx-meals');
+  try {
+    const res = await fetch(`/api/get_micronutrients/${AppState.userId}?date=${AppState.diaryDate}`);
+    const data = await res.json();
+    const list = data.micronutrients || [];
 
-  if (!AppState.profile) return;
-  const targets = AppState.profile.targets || { calories: 2000, protein_g: 120 };
-  const remCal = Math.max(0, targets.calories - Math.round(AppState.diaryTotals.calories || 0));
-  const remPro = Math.max(0, targets.protein_g - Math.round(AppState.diaryTotals.protein || 0));
-
-  if (goalEl) goalEl.textContent = AppState.profile.goal === 'fat_loss' ? 'Fat Loss' : AppState.profile.goal === 'muscle_gain' ? 'Muscle Gain' : 'Maintain';
-  if (calEl) calEl.textContent = `${remCal} kcal`;
-  if (proEl) proEl.textContent = `${remPro}g`;
-}
-
-function initCoachWelcome() {
-  const stream = document.getElementById('coach-chat-stream');
-  if (!stream) return;
-  stream.innerHTML = '';
-  AppState.coachHistory = [];
-  const name = AppState.profile ? AppState.profile.name : 'there';
-  const welcome = `👋 **Namaste ${name}!** I am your **NutriCoach AI** nutritionist.\n\nI have live context of your calorie budget, daily protein target, and meals logged today.\n\nAsk me for:\n- 🍛 High-protein Indian meal ideas tailored to your remaining macros\n- ⚖️ Healthy restaurant swaps and festival diet strategies\n- 🥗 Low-calorie Indian evening snacks (<150 kcal)\n- 🏋️ Pre/Post workout nutrition\n\n*Tap a suggestion below or type your question!*`;
-  appendCoachMessage(welcome, false);
-}
-
-function clearCoachConversation() {
-  if (confirm('Reset conversation history?')) {
-    initCoachWelcome();
-    showToast('Conversation reset.');
-  }
-}
-
-function appendUserMessage(text) {
-  const stream = document.getElementById('coach-chat-stream');
-  const row = document.createElement('div');
-  row.className = 'chat-bubble-row user';
-  row.innerHTML = `<div class="chat-bubble"><p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p></div>`;
-  stream.appendChild(row);
-  stream.scrollTop = stream.scrollHeight;
-}
-
-function appendCoachMessage(markdown, save = true) {
-  const stream = document.getElementById('coach-chat-stream');
-  const row = document.createElement('div');
-  row.className = 'chat-bubble-row assistant';
-  row.innerHTML = `
-    <div style="font-size:1.25rem;">🤖</div>
-    <div class="chat-bubble">${renderMarkdownText(markdown)}</div>
-  `;
-  stream.appendChild(row);
-  stream.scrollTop = stream.scrollHeight;
-  if (save) AppState.coachHistory.push({ role: 'assistant', content: markdown });
-}
-
-function renderMarkdownText(text) {
-  if (!text) return '';
-  let escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
-  const lines = escaped.split('\n');
-  let res = '';
-  let inList = false;
-
-  for (let l of lines) {
-    let t = l.trim();
-    if (!t) { if (inList) { res += '</ul>'; inList = false; } continue; }
-    if (t.startsWith('- ') || t.startsWith('* ')) {
-      if (!inList) { res += '<ul>'; inList = true; }
-      res += `<li>${t.substring(2)}</li>`;
-    } else {
-      if (inList) { res += '</ul>'; inList = false; }
-      res += `<p>${t}</p>`;
+    if (!list.length) {
+      container.innerHTML = '<div style="font-size:.8rem;color:#64748b;">No micronutrient data for today yet.</div>';
+      return;
     }
+
+    container.innerHTML = list.map(m => `
+      <div class="micro-item">
+        <div class="micro-hdr">
+          <span class="micro-name">${escapeHtml(m.label)}</span>
+          <span class="micro-val" style="color:${m.percent >= 70 ? '#10b981' : m.percent >= 40 ? '#f59e0b' : '#ef4444'}">${m.consumed} / ${m.target} ${m.unit}</span>
+        </div>
+        <div class="micro-track">
+          <div class="micro-fill" style="width:${Math.min(100, m.percent)}%;background:${m.percent >= 70 ? '#10b981' : m.percent >= 40 ? '#f59e0b' : '#ef4444'};"></div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('loadMicronutrients error:', err);
   }
-  if (inList) res += '</ul>';
-  return res;
 }
 
-function sendPromptChip(text) {
-  sendCoachChat(text);
-}
+async function loadGlycemicInfo() {
+  const container = document.getElementById('p-gi-result');
+  if (!container) return;
 
-function handleCoachInputKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendCoachChat();
+  try {
+    const res = await fetch('/api/get_glycemic_info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: AppState.userId, date: AppState.diaryDate })
+    });
+    const data = await res.json();
+    const foods = data.foods || [];
+
+    if (!foods.length) {
+      container.innerHTML = '<div style="font-size:.8rem;color:#64748b;padding:6px 0;">Log meals to see blood sugar & GI impact.</div>';
+      return;
+    }
+
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:.85rem;">
+        <span style="font-weight:700;">Total Glycemic Load</span>
+        <span style="font-weight:800;color:${data.daily_gl_status === 'Low' ? '#10b981' : data.daily_gl_status === 'Moderate' ? '#f59e0b' : '#ef4444'};">${data.total_glycemic_load} (${data.daily_gl_status})</span>
+      </div>
+      <div style="font-size:.78rem;color:#94a3b8;margin-bottom:10px;">${escapeHtml(data.recommendation || '')}</div>
+      ${foods.map(f => `
+        <div class="gi-row">
+          <span>${escapeHtml(f.food || '')}</span>
+          <span style="font-weight:700;color:${f.diabetes_friendly ? '#10b981' : '#f59e0b'};">${f.gi_category || 'GI'}</span>
+        </div>
+      `).join('')}
+    `;
+  } catch (e) {
+    console.error('loadGlycemicInfo error:', e);
   }
 }
 
-async function sendCoachChat(customText) {
-  if (AppState.isCoachReplying) return;
+// ── TOOLS TAB (FAVOURITES, RECIPES, MEAL PLAN) ────────────────────
+async function loadFavourites() {
+  const container = document.getElementById('t-favourites-list');
+  if (!container) return;
+  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const res = await fetch(`/api/get_favourites/${AppState.userId}`);
+    const data = await res.json();
+    const list = data.favourites || [];
+
+    if (!list.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">⭐</div><div class="empty-text">No favourites saved yet.<br>Save any scanned or searched food as a favourite for 1-tap logging!</div></div>';
+      return;
+    }
+
+    container.innerHTML = list.map(f => `
+      <div class="fav-item">
+        <div>
+          <div class="fav-name">${escapeHtml(f.name || f.display_name || f.food || '')}</div>
+          <div class="fav-meta">${f.calories} kcal · ${f.portion || 100}g · ${f.meal_type || 'meal'}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-primary" style="padding:6px 12px;font-size:.78rem;" onclick="quickLogFavourite('${escapeHtml(f.name || '').replace(/'/g, "\\'")}')">⚡ Log</button>
+          <button style="background:none;border:none;color:#64748b;cursor:pointer;padding:4px;" onclick="deleteFavourite('${escapeHtml(f.name || '').replace(/'/g, "\\'")}')">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<div class="empty"><div class="empty-text">Error loading favourites.</div></div>';
+  }
+}
+
+async function quickLogFavourite(name) {
+  try {
+    const res = await fetch('/api/quicklog_favourite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        name: name,          // backend expects 'name', not 'meal_name'
+        date: AppState.diaryDate
+      })
+    });
+    const d = await res.json();
+    if (d.success) {
+      showToast(`Logged "${name}"! ✅`);
+      loadDashboard();
+    } else {
+      showToast(d.error || 'Could not log favourite.', true);
+    }
+  } catch (e) {
+    showToast('Quick log failed.', true);
+  }
+}
+
+async function deleteFavourite(name) {
+  try {
+    await fetch('/api/delete_favourite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: AppState.userId, name: name })
+    });
+    showToast('Favourite removed.');
+    loadFavourites();
+  } catch (e) {}
+}
+
+function saveSearchAsFavourite() {
+  if (!_modalFoodItem) return;
+  const name = prompt('Name for this favourite:', _modalFoodItem.display_name || _modalFoodItem.name);
+  if (!name) return;
+
+  const portion = parseInt(document.getElementById('fm-portion-slider')?.value || '100', 10);
+  const factor = portion / 100;
+
+  fetch('/api/save_favourite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id: AppState.userId,
+      name: name,
+      food: _modalFoodItem.name,
+      display_name: name,
+      portion: portion,
+      calories: Math.round((_modalFoodItem.calories_per_100g || 0) * factor),
+      protein: Math.round((_modalFoodItem.protein || 0) * factor * 10) / 10,
+      carbs: Math.round((_modalFoodItem.carbs || 0) * factor * 10) / 10,
+      fat: Math.round((_modalFoodItem.fat || 0) * factor * 10) / 10,
+      meal_type: _modalFoodMeal
+    })
+  }).then(() => showToast(`⭐ Saved "${name}"!`)).catch(() => showToast('Save failed.', true));
+}
+
+// Recipes
+let _recipeIngredients = [];
+function addRecipeIngredient() {
+  const name = prompt('Ingredient name (e.g. Paneer, Rice, Moong Dal):');
+  if (!name) return;
+  const grams = parseFloat(prompt('Quantity in grams:', '100')) || 100;
+  const cals = parseFloat(prompt('Calories per 100g (optional, 0 for estimate):', '150')) || 150;
+
+  _recipeIngredients.push({ name, grams, calories_per_100g: cals, protein: 5, carbs: 20, fat: 5 });
+  renderRecipeIngredients();
+}
+
+function removeIngredient(idx) {
+  _recipeIngredients.splice(idx, 1);
+  renderRecipeIngredients();
+}
+
+function renderRecipeIngredients() {
+  const container = document.getElementById('recipe-ingredients-list');
+  if (!container) return;
+  if (!_recipeIngredients.length) {
+    container.innerHTML = '<div style="font-size:.8rem;color:#64748b;">No ingredients added yet.</div>';
+    return;
+  }
+  container.innerHTML = _recipeIngredients.map((item, i) => `
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:.84rem;">
+      <span>${escapeHtml(item.name)} (${item.grams}g)</span>
+      <button onclick="removeIngredient(${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;">✕</button>
+    </div>
+  `).join('');
+}
+
+async function saveRecipe() {
+  const name = (document.getElementById('recipe-name')?.value || '').trim();
+  const servings = parseInt(document.getElementById('recipe-servings')?.value || '1', 10);
+  if (!name || !_recipeIngredients.length) {
+    showToast('Enter recipe name and at least 1 ingredient.', true);
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/save_recipe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        name: name,
+        ingredients: _recipeIngredients,
+        servings: servings
+      })
+    });
+    const d = await res.json();
+    if (d.success) {
+      showToast(`Recipe "${name}" saved! ✅`);
+      _recipeIngredients = [];
+      renderRecipeIngredients();
+      loadSavedRecipes();
+    }
+  } catch (e) {
+    showToast('Failed to save recipe.', true);
+  }
+}
+
+async function loadSavedRecipes() {
+  const container = document.getElementById('t-recipes-list');
+  if (!container) return;
+  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const res = await fetch(`/api/get_recipes/${AppState.userId}`);
+    const data = await res.json();
+    const list = data.recipes || [];
+
+    if (!list.length) {
+      container.innerHTML = '<div class="empty"><div class="empty-icon">📖</div><div class="empty-text">No custom recipes saved yet.</div></div>';
+      return;
+    }
+
+    container.innerHTML = list.map(r => `
+      <div class="recipe-item">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div class="recipe-name">${escapeHtml(r.name)}</div>
+            <div class="recipe-meta">${r.servings} serving(s) · ${r.total_calories} total kcal</div>
+          </div>
+          <button onclick="deleteRecipe('${escapeHtml(r.name).replace(/'/g, "\\'")}')" style="background:none;border:none;color:#64748b;cursor:pointer;">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<div class="empty"><div class="empty-text">Error loading recipes.</div></div>';
+  }
+}
+
+async function deleteRecipe(name) {
+  try {
+    await fetch('/api/delete_recipe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: AppState.userId, name: name })
+    });
+    showToast('Recipe deleted.');
+    loadSavedRecipes();
+  } catch (e) {}
+}
+
+// AI Meal Plan
+async function generateMealPlan() {
+  const days = parseInt(document.getElementById('plan-days')?.value || '3', 10);
+  const diet = document.getElementById('plan-diet')?.value || 'vegetarian';
+  const region = document.getElementById('plan-region')?.value || 'North Indian';
+
+  const loading = document.getElementById('meal-plan-loading');
+  const btn = document.getElementById('btn-generate-plan');
+  const out = document.getElementById('meal-plan-output');
+
+  if (loading) loading.style.display = 'block';
+  if (btn) btn.disabled = true;
+  if (out) out.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/generate_meal_plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        api_key: AppState.geminiKey,
+        days: days,
+        preferences: { diet, region }
+      })
+    });
+    const data = await res.json();
+    if (loading) loading.style.display = 'none';
+    if (btn) btn.disabled = false;
+
+    if (!data.success || !data.meal_plan) {
+      showToast(data.error || 'Failed to generate plan.', true);
+      return;
+    }
+
+    const plan = data.meal_plan;
+    if (out) out.style.display = 'block';
+
+    const shopEl = document.getElementById('plan-shopping-list');
+    if (shopEl && plan.shopping_list) {
+      shopEl.innerHTML = plan.shopping_list.map(item => `
+        <span style="background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.25);padding:4px 10px;border-radius:99px;font-size:.76rem;">${escapeHtml(item)}</span>
+      `).join('');
+    }
+
+    const daysEl = document.getElementById('plan-days-container');
+    if (daysEl && plan.plan) {
+      daysEl.innerHTML = plan.plan.map(d => `
+        <div class="plan-day">
+          <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+            <span style="font-weight:800;font-size:.95rem;">Day ${d.day}</span>
+            <span style="font-size:.78rem;color:#64748b;">${d.total_calories || ''} kcal · ${d.total_protein || ''}g P</span>
+          </div>
+          ${Object.entries(d.meals || {}).map(([mName, mVal]) => `
+            <div class="plan-meal">
+              <div class="plan-meal-name">${mName.toUpperCase()} · ${mVal.time || ''}</div>
+              <div class="plan-meal-items">${(mVal.items || []).join(' · ')}</div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+    }
+    showToast('Meal plan ready! 🥗');
+  } catch (err) {
+    if (loading) loading.style.display = 'none';
+    if (btn) btn.disabled = false;
+    showToast('Plan generation failed.', true);
+  }
+}
+
+// ── PROFILE & ME TAB ──────────────────────────────────────────────
+function updateMeTab() {
+  const p = AppState.profile;
+  const card = document.getElementById('profile-summary-card');
+  const editCard = document.getElementById('profile-edit-card');
+
+  if (!p) {
+    if (card) card.style.display = 'none';
+    if (editCard) editCard.style.display = 'block';
+    return;
+  }
+
+  if (card) card.style.display = 'block';
+  if (editCard) editCard.style.display = 'none';
+
+  const goalMap = {
+    lose_weight: 'Lose Weight 🔥',
+    maintain: 'Maintain Weight ⚖️',
+    build_muscle: 'Build Muscle 💪'
+  };
+
+  const setVal = (id, v, clr) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = v;
+      if (clr) el.style.color = clr;
+    }
+  };
+  setVal('me-name', p.name || 'User');
+  setVal('me-goal-label', goalMap[p.goal] || p.goal || 'Healthy Diet');
+  setVal('me-calories', p.target_calories || (p.targets && p.targets.calories) || '—');
+  setVal('me-protein', (p.target_protein || (p.targets && p.targets.protein_g) || '—') + 'g');
+
+  if (p.height && p.weight) {
+    const bmi = (p.weight / Math.pow(p.height / 100, 2)).toFixed(1);
+    const clr = bmi < 18.5 ? '#38bdf8' : bmi < 25 ? '#10b981' : bmi < 30 ? '#f59e0b' : '#ef4444';
+    setVal('me-bmi', bmi, clr);
+  }
+}
+
+function toggleProfileEdit() {
+  const editCard = document.getElementById('profile-edit-card');
+  const sumCard = document.getElementById('profile-summary-card');
+  if (!editCard) return;
+  const hidden = editCard.style.display === 'none';
+  editCard.style.display = hidden ? 'block' : 'none';
+  if (sumCard && !hidden) sumCard.style.display = 'block';
+}
+
+function refreshMeTab() {
+  const p = AppState.profile;
+  if (p) {
+    updateMeTab();
+    ['name', 'age', 'height', 'weight'].forEach(k => {
+      const el = document.getElementById('pro-' + k);
+      if (el && p[k] !== undefined) el.value = p[k];
+    });
+    const gEl = document.getElementById('pro-gender');
+    if (gEl && p.gender) gEl.value = p.gender;
+    const aEl = document.getElementById('pro-activity');
+    if (aEl && p.activity) aEl.value = p.activity;
+    const goEl = document.getElementById('pro-goal');
+    if (goEl && p.goal) goEl.value = p.goal;
+  }
+  checkGeminiKeyStatus();
+}
+
+async function saveProfile() {
+  const name = document.getElementById('pro-name')?.value.trim() || 'User';
+  const age = parseInt(document.getElementById('pro-age')?.value || '25', 10);
+  const gender = document.getElementById('pro-gender')?.value || 'male';
+  const height = parseFloat(document.getElementById('pro-height')?.value || '170');
+  const weight = parseFloat(document.getElementById('pro-weight')?.value || '65');
+  const activity = document.getElementById('pro-activity')?.value || 'moderate';
+  const goal = document.getElementById('pro-goal')?.value || 'maintain';
+
+  try {
+    const res = await fetch('/api/save_profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: AppState.userId,
+        name, age, gender, height, weight, activity, goal
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      const targets = data.targets || {};
+      AppState.profile = {
+        name, age, gender, height, weight, activity, goal,
+        target_calories: targets.calories || 2000,
+        target_protein: targets.protein_g || 120,
+        target_carbs: targets.carbs_g || 250,
+        target_fat: targets.fat_g || 65,
+        tdee: data.tdee
+      };
+      localStorage.setItem('nv_profile', JSON.stringify(AppState.profile));
+      showToast('Profile saved! Targets calculated ✅');
+      updateMeTab();
+      loadDashboard();
+    }
+  } catch (err) {
+    showToast('Failed to save profile.', true);
+  }
+}
+
+// Gemini API Key
+function saveGeminiAPIKey() {
+  const key = (document.getElementById('gemini-key-input')?.value || '').trim();
+  if (key) {
+    localStorage.setItem('nv_gemini_key', key);
+    AppState.geminiKey = key;
+    showToast('API Key saved! ✅');
+  } else {
+    localStorage.removeItem('nv_gemini_key');
+    AppState.geminiKey = '';
+    showToast('API Key removed.');
+  }
+  checkGeminiKeyStatus();
+}
+
+function saveGeminiAPIKeyFromModal() {
+  const key = (document.getElementById('gemini-key-modal-input')?.value || '').trim();
+  if (key) {
+    localStorage.setItem('nv_gemini_key', key);
+    AppState.geminiKey = key;
+    showToast('API Key saved! ✅');
+    closeModal('gemini-key-modal');
+  }
+  checkGeminiKeyStatus();
+}
+
+function checkGeminiKeyStatus() {
+  const badge = document.getElementById('gemini-key-status');
+  fetch('/api/coach/status')
+    .then(r => r.json())
+    .then(d => {
+      const active = d.has_server_key || Boolean(AppState.geminiKey);
+      if (badge) badge.style.display = active ? 'inline-block' : 'none';
+    })
+    .catch(() => {
+      if (badge) badge.style.display = AppState.geminiKey ? 'inline-block' : 'none';
+    });
+}
+
+// ── NUTRICOACH CHAT ───────────────────────────────────────────────
+async function sendCoachChat() {
   const input = document.getElementById('coach-query-input');
-  const text = (customText || (input ? input.value : '')).trim();
-  if (!text) return;
-  if (!customText && input) input.value = '';
+  const query = (input?.value || '').trim();
+  if (!query || AppState.isCoachReplying) return;
 
-  appendUserMessage(text);
-  AppState.coachHistory.push({ role: 'user', content: text });
-
+  input.value = '';
   AppState.isCoachReplying = true;
-  const sendBtn = document.getElementById('coach-send-btn');
-  if (sendBtn) sendBtn.disabled = true;
 
-  const stream = document.getElementById('coach-chat-stream');
-  const typingIndicator = document.createElement('div');
-  typingIndicator.id = 'coach-thinking-bubble';
-  typingIndicator.className = 'chat-bubble-row assistant';
-  typingIndicator.innerHTML = `<div style="font-size:1.25rem;">🤖</div><div class="chat-bubble" style="font-style:italic;color:var(--text-tertiary);">NutriCoach is analyzing your diet context...</div>`;
-  stream.appendChild(typingIndicator);
-  stream.scrollTop = stream.scrollHeight;
+  const messagesEl = document.getElementById('coach-messages');
+  if (messagesEl) {
+    const userBubble = document.createElement('div');
+    userBubble.className = 'chat-bubble user';
+    userBubble.textContent = query;
+    messagesEl.appendChild(userBubble);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
 
   try {
     const res = await fetch('/api/coach/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: text,
-        history: AppState.coachHistory.slice(0, -1),
         user_id: AppState.userId,
+        message: query,
         api_key: AppState.geminiKey
       })
     });
-    typingIndicator.remove();
     const data = await res.json();
-    if (res.ok && data.success) {
-      appendCoachMessage(data.reply, true);
-    } else {
-      appendCoachMessage(`⚠️ ${data.error || 'Unable to connect to Gemini AI.'}`, false);
+    const reply = data.reply || data.message || 'Sorry, could not answer right now.';
+
+    if (messagesEl) {
+      const botBubble = document.createElement('div');
+      botBubble.className = 'chat-bubble bot';
+      botBubble.innerHTML = reply.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      messagesEl.appendChild(botBubble);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
     }
   } catch (err) {
-    typingIndicator.remove();
-    appendCoachMessage('⚠️ Connection error. Please verify server status.', false);
-  } finally {
-    AppState.isCoachReplying = false;
-    if (sendBtn) sendBtn.disabled = false;
+    if (messagesEl) {
+      const errBubble = document.createElement('div');
+      errBubble.className = 'chat-bubble bot';
+      errBubble.textContent = 'Network error. Try again.';
+      messagesEl.appendChild(errBubble);
+    }
   }
+  AppState.isCoachReplying = false;
 }
 
-function startVoiceMic() {
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    showToast('Speech recognition not supported in this browser.', true);
+function startCoachVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    showToast('Voice recognition not supported.', true);
     return;
   }
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'en-IN';
-  const micBtn = document.getElementById('coach-voice-btn');
-  if (micBtn) micBtn.style.color = '#ef4444';
-  showToast('🎙️ Listening... Speak your question.');
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    document.getElementById('coach-query-input').value = transcript;
-    if (micBtn) micBtn.style.color = 'var(--text-secondary)';
+  const rec = new SR();
+  rec.lang = 'en-IN';
+  showToast('🎤 Listening to your question...');
+  rec.onresult = (e) => {
+    const t = e.results[0][0].transcript;
+    const inp = document.getElementById('coach-query-input');
+    if (inp) inp.value = t;
     sendCoachChat();
   };
-  recognition.onerror = () => {
-    if (micBtn) micBtn.style.color = 'var(--text-secondary)';
-  };
-  recognition.onend = () => {
-    if (micBtn) micBtn.style.color = 'var(--text-secondary)';
-  };
-  recognition.start();
+  rec.start();
 }
 
-// ==========================================
-// 11. TOAST NOTIFICATIONS
-// ==========================================
-function showToast(message, isError = false) {
-  const toast = document.getElementById('app-toast');
-  if (!toast) return;
-  toast.textContent = message;
-  toast.style.borderColor = isError ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)';
-  toast.style.color = isError ? '#fca5a5' : '#86efac';
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2600);
+async function openCoachQuickTip() {
+  openModal('coach-tip-modal');
+  const content = document.getElementById('coach-tip-content');
+  if (content) content.innerHTML = '<div class="spinner"></div>';
+
+  try {
+    const res = await fetch('/api/coach/quick_insight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: AppState.userId, api_key: AppState.geminiKey })
+    });
+    const d = await res.json();
+    if (content) {
+      content.innerHTML = `<div style="font-size:.9rem;line-height:1.6;color:#e2e8f0;padding:8px 0;">${escapeHtml(d.insight || 'Keep your protein high and stay hydrated today!')}</div>`;
+    }
+  } catch (e) {
+    if (content) content.innerHTML = '<div style="font-size:.85rem;color:#94a3b8;">Stay consistent with your hydration and daily calorie goals!</div>';
+  }
 }
+
+// ── UTILS ─────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function setupDropzone() {
+  const zone = document.getElementById('scan-zone');
+  if (!zone) return;
+  ['dragenter', 'dragover'].forEach(eName => {
+    zone.addEventListener(eName, (e) => {
+      e.preventDefault();
+      zone.style.borderColor = '#f97316';
+    });
+  });
+  ['dragleave', 'drop'].forEach(eName => {
+    zone.addEventListener(eName, (e) => {
+      e.preventDefault();
+      zone.style.borderColor = 'rgba(249,115,22,.3)';
+    });
+  });
+  zone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) {
+      handleScanFile({ files: [file] });
+    }
+  });
+}
+
+// ── INIT ON DOM LOAD ──────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    // 1. Load saved profile from localStorage
+    const saved = localStorage.getItem('nv_profile');
+    if (saved) {
+      try { AppState.profile = JSON.parse(saved); } catch (e) { AppState.profile = null; }
+    }
+
+    // 2. Setup dropzone
+    setupDropzone();
+
+    // 3. Bind enter key on inputs
+    const searchInp = document.getElementById('food-search-input');
+    if (searchInp) {
+      searchInp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') performFoodSearch(searchInp.value.trim(), AppState.searchCategory || 'all');
+      });
+    }
+
+    const coachInp = document.getElementById('coach-query-input');
+    if (coachInp) {
+      coachInp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') sendCoachChat();
+      });
+    }
+
+    // 4. Update Header, Dashboard, and Water
+    updateGreeting();
+    loadWaterData();
+    loadDashboard();
+    checkGeminiKeyStatus();
+  } catch (err) {
+    console.error('Initialization error:', err);
+  }
+});

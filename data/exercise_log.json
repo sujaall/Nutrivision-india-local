@@ -1,0 +1,31 @@
+{
+  "nv_user": {
+    "2026-09-26": [
+      {
+        "exercise": "walking",
+        "duration_min": 30.0,
+        "calories_burned": 114,
+        "met": 3.5,
+        "time": "00:26"
+      }
+    ],
+    "2026-09-27": [
+      {
+        "exercise": "walking",
+        "duration_min": 30.0,
+        "calories_burned": 114,
+        "met": 3.5,
+        "time": "01:27"
+      }
+    ],
+    "2026-09-29": [
+      {
+        "exercise": "yoga",
+        "duration_min": 30.0,
+        "calories_burned": 81,
+        "met": 2.5,
+        "time": "23:20"
+      }
+    ]
+  }
+}
