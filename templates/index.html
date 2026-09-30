@@ -13,6 +13,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/static/css/main.css?v=2.6">
+  <link rel="stylesheet" href="/static/css/nutrivision-premium.css?v=1.0">
   <style>
 /* ── CLEAN REDESIGN ── */
 *{box-sizing:border-box;margin:0;padding:0}
@@ -217,6 +218,20 @@ select.field-input{cursor:pointer}
   </style>
 </head>
 <body>
+
+<!-- AMBIENT BACKGROUND CANVAS -->
+<canvas id="ambient-bg" style="position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.45;" aria-hidden="true"></canvas>
+
+<!-- SVG GRADIENT DEFS (for calorie ring) -->
+<svg width="0" height="0" style="position:absolute;" aria-hidden="true">
+  <defs>
+    <linearGradient id="calRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316"/>
+      <stop offset="50%" stop-color="#ff6b6b"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+  </defs>
+</svg>
 
 <!-- TOP BAR -->
 <header class="top-bar">
@@ -690,6 +705,63 @@ select.field-input{cursor:pointer}
 </div>
 
 <script src="/static/js/app.js?v=3.1"></script>
+<script>
+// ── PREMIUM AMBIENT PARTICLE BACKGROUND ──
+(function(){
+  const canvas = document.getElementById('ambient-bg');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [], raf;
+  const N = 35;
+  function resize(){
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  function mkParticle(){
+    return {
+      x: Math.random()*W, y: Math.random()*H,
+      r: Math.random()*2+0.5,
+      vx: (Math.random()-0.5)*0.3, vy: (Math.random()-0.5)*0.3,
+      a: Math.random(),
+      hue: Math.random()<0.6 ? 24 : (Math.random()<0.5 ? 262 : 199)
+    };
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  for(let i=0;i<N;i++) particles.push(mkParticle());
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    particles.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<-10)p.x=W+10; if(p.x>W+10)p.x=-10;
+      if(p.y<-10)p.y=H+10; if(p.y>H+10)p.y=-10;
+      p.a+=0.005;
+      const alpha=(Math.sin(p.a)*0.5+0.5)*0.5+0.1;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`hsla(${p.hue},90%,65%,${alpha})`;
+      ctx.fill();
+    });
+    // subtle connection lines
+    for(let i=0;i<particles.length;i++){
+      for(let j=i+1;j<particles.length;j++){
+        const dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<120){
+          ctx.beginPath();
+          ctx.strokeStyle=`rgba(249,115,22,${(1-dist/120)*0.07})`;
+          ctx.lineWidth=0.5;
+          ctx.moveTo(particles[i].x,particles[i].y);
+          ctx.lineTo(particles[j].x,particles[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+    raf=requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
 <script>if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
 </body>
 </html>
