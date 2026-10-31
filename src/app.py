@@ -564,8 +564,8 @@ Return ONLY valid JSON, no markdown, no backticks:
 
     success, reply = call_gemini_api(
         messages=[message_payload],
-        system_prompt="You are a precise food nutrition expert. Always return valid JSON only.",
-        max_tokens=2048
+        system_prompt="You are a precise food nutrition expert. Always return valid JSON only. No markdown, no backticks, no extra text.",
+        max_tokens=4096
     )
 
     if not success or not reply:
@@ -575,14 +575,46 @@ Return ONLY valid JSON, no markdown, no backticks:
     print(f"[GEMINI VISION] Raw reply (first 300 chars): {reply[:300]}")
 
     try:
-        clean = reply.replace("```json", "").replace("```", "").strip()
-        start = clean.find("{")
-        end = clean.rfind("}")
-        if start == -1 or end == -1:
+        # Strip markdown fences and control characters that break JSON
+        import unicodedata
+        clean = reply.replace('```json', '').replace('```', '').strip()
+        # Remove control chars except newline/tab
+        clean = ''.join(c for c in clean if unicodedata.category(c) != 'Cc' or c in ('\n', '\t', '\r'))
+        start = clean.find('{')
+        end = clean.rfind('}')
+        if start == -1 or end == -1 or end <= start:
             print(f"[GEMINI VISION] No JSON braces found in reply: {clean[:200]}")
             return None
-        ai = json.loads(clean[start:end+1])
-        food_name = str(ai.get('food_name', '')).replace(' ', '_').lower()
+        json_str = clean[start:end+1]
+        try:
+            ai = json.loads(json_str)
+        except json.JSONDecodeError as je:
+            # Try to recover by extracting individual fields with regex
+            import re as _re
+            print(f"[GEMINI VISION] JSON parse failed ({je}), trying regex recovery")
+            def _extract(key, default=''):
+                m = _re.search(rf'"{ key }"\s*:\s*"?([^"\n,}}]+)"?', json_str)
+                return m.group(1).strip().strip('"') if m else default
+            def _extract_num(key, default=0):
+                m = _re.search(rf'"{ key }"\s*:\s*([\d.]+)', json_str)
+                return float(m.group(1)) if m else default
+            ai = {
+                'food_name': _extract('food_name'),
+                'food_display': _extract('food_display'),
+                'calories_per_100g': _extract_num('calories_per_100g'),
+                'protein': _extract_num('protein'),
+                'carbs': _extract_num('carbs'),
+                'fat': _extract_num('fat'),
+                'portion_estimate_g': _extract_num('portion_estimate_g', 150),
+                'health_score': _extract_num('health_score', 7),
+                'confidence_note': _extract('confidence_note'),
+                'ai_notes': _extract('ai_notes'),
+            }
+            if not ai['food_name']:
+                print(f"[GEMINI VISION] Regex recovery also failed, returning None")
+                return None
+            print(f"[GEMINI VISION] Recovered via regex: {ai['food_name']}")
+        food_name = str(ai.get('food_name', '')).replace(' ', '_').lower().strip()
         if not food_name:
             print(f"[GEMINI VISION] food_name empty in parsed JSON: {ai}")
             return None
@@ -599,7 +631,7 @@ Return ONLY valid JSON, no markdown, no backticks:
             'ai_notes':           str(ai.get('ai_notes', ''))
         }
     except Exception as e:
-        print(f"[GEMINI VISION] JSON parse error: {e} | Reply was: {reply[:300]}")
+        print(f"[GEMINI VISION] Unhandled parse error: {e} | Reply: {reply[:300]}")
         return None
 
 def analyze_with_gemini_vision(image_path, nutrition_db):
@@ -1063,6 +1095,14 @@ def search_food():
         if category_filter and category_filter != 'all':
             if category_filter == 'high_protein':
                 matches_cat = nut.get('protein', 0) >= 8
+            elif category_filter == 'non-vegetarian':
+                # Non-veg: food is in a non-veg category OR its name contains a non-veg keyword
+                _non_veg_cats = {'chicken', 'mutton', 'seafood', 'eggs'}
+                matches_cat = (food_cat in _non_veg_cats) or any(kw in food_name_clean for kw in non_veg_keywords)
+            elif category_filter == 'vegetarian':
+                # Veg: NOT in a non-veg category AND name contains no non-veg keyword
+                _non_veg_cats = {'chicken', 'mutton', 'seafood', 'eggs'}
+                matches_cat = (food_cat not in _non_veg_cats) and not any(kw in food_name_clean for kw in non_veg_keywords)
             elif category_filter in ['breakfast', 'curry', 'rice', 'dal', 'snacks', 'dairy', 'breads', 'sweets']:
                 matches_cat = (category_filter in food_cat) or (category_filter in food_name_clean)
             else:
@@ -2060,10 +2100,30 @@ def get_micronutrients(user_id):
     for entry in entries:
         food_key = entry.get('food', '').lower().replace(' ', '_')
         portion_g = entry.get('portion', 100)
-        factor = portion_g / 100
+        if not isinstance(portion_g, (int, float)) or portion_g <= 0:
+            portion_g = 100
+        factor = portion_g / 100.0
+
+        # Step 1: exact lookup in MICRONUTRIENT_DB
         micro = MICRONUTRIENT_DB.get(food_key, {})
+
+        # Step 2: if not found, try fuzzy match within MICRONUTRIENT_DB
+        if not micro:
+            micro = fuzzy_nutrition_lookup(food_key, MICRONUTRIENT_DB, cutoff=0.6)
+
+        # Step 3: accumulate micronutrients from MICRONUTRIENT_DB match
         for k in totals:
-            totals[k] += micro.get(k, 0) * factor
+            val = micro.get(k)
+            if isinstance(val, (int, float)):
+                totals[k] += val * factor
+
+        # Step 4: for 'fiber', fall back to the main nutrition_db when
+        # MICRONUTRIENT_DB had no entry or its fiber was 0/absent.
+        if not micro.get('fiber'):
+            nutr_entry = fuzzy_nutrition_lookup(food_key, nutrition_db, cutoff=0.55)
+            fiber_val = nutr_entry.get('fiber')
+            if isinstance(fiber_val, (int, float)) and fiber_val > 0:
+                totals['fiber'] += fiber_val * factor
 
     result = []
     for key, target_info in DAILY_MICRONUTRIENT_TARGETS.items():
